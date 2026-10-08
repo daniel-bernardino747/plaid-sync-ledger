@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "psl-webhooks",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // TCP sockets for the postgres driver.
+  "compatibility_flags": ["nodejs_compat"],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Placeholder: create with `wrangler hyperdrive create` for a real deploy.
+      "id": "00000000000000000000000000000000",
+      // wrangler dev connects here directly (ADR 0002). The Worker is a
+      // background writer, so it uses the app_system role (ADR 0007).
+      "localConnectionString": "postgresql://app_system:app_system@localhost:54329/psl"
+    }
+  ],
+  "vars": {
+    "PLAID_BASE_URL": "http://127.0.0.1:4010",
+    "PLAID_CLIENT_ID": "fake-client-id"
+  }
+  // PLAID_SECRET comes from .dev.vars locally and `wrangler secret put` in production.
+}

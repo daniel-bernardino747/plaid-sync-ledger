@@ -1,0 +1,24 @@
+{
+  "name": "@psl/webhooks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@psl/log": "workspace:*",
+    "@psl/plaid": "workspace:*",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261008.1",
+    "@psl/db": "workspace:*",
+    "@psl/plaid-fake": "workspace:*",
+    "@types/node": "24.10.1",
+    "vitest": "5.0.3",
+    "wrangler": "4.148.0"
+  }
+}
