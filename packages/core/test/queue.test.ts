@@ -1,3 +1,4 @@
+import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { backoffMs, claimJob, enqueue, enqueueStaleItems, parkForReauth, reapExpired } from "../src/queue.ts";
 import { processOne } from "../src/worker.ts";
@@ -201,7 +202,7 @@ describe("parking for re-auth is atomic (ADR 0005)", () => {
     return { item: rows[0].status as string, jobs: await h.jobs() };
   }
 
-  it("applies nothing if it dies halfway: the item stays active and the job stays running", async () => {
+  it("applies nothing if it dies halfway: no Item parked while its job still runs", async () => {
     const { itemId } = await h.connect();
     const job = (await claimJob(h.system, "w", 30))!;
     const crash = new Error("crash between the two writes");
@@ -211,7 +212,7 @@ describe("parking for re-auth is atomic (ADR 0005)", () => {
     expect(await state(itemId)).toMatchObject({ item: "active", jobs: [{ status: "running", attempts: 1 }] });
   });
 
-  it("parks the item and requeues the job without consuming the attempt", async () => {
+  it("parks the item and requeues the job, giving back the attempt it was claimed with", async () => {
     const { itemId } = await h.connect();
     const job = (await claimJob(h.system, "w", 30))!;
     expect(await parkForReauth(h.system, job, "w")).toBe("queued");
@@ -230,6 +231,33 @@ describe("parking for re-auth is atomic (ADR 0005)", () => {
     });
     expect(r).toBe("superseded");
     expect(await state(itemId)).toMatchObject({ item: "needs_reauth", jobs: [{ status: "superseded" }, { status: "queued" }] });
+  });
+});
+
+describe("parking for re-auth under a real coalescing conflict", () => {
+  it("retries once when a concurrent enqueue collides on the unique index (23505), then supersedes", async () => {
+    const { itemId } = await h.connect();
+    const job = (await claimJob(h.system, "w", 30))!;
+    const other = new pg.Client({ connectionString: h.urls.owner });
+    await other.connect();
+    try {
+      const r = await parkForReauth(h.system, job, "w", {
+        // A webhook's enqueue is in flight: inserted but not yet committed, so
+        // our existence check cannot see it and our UPDATE to 'queued' blocks
+        // on the unique index until it commits, then fails with 23505.
+        afterItemUpdate: async () => {
+          await other.query("BEGIN");
+          await other.query(`INSERT INTO sync_jobs (item_id, kind) VALUES ($1, 'transactions_sync')`, [itemId]);
+          setTimeout(() => void other.query("COMMIT"), 300);
+        },
+      });
+      expect(r).toBe("superseded");
+      const { rows } = await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId]);
+      expect(rows[0].status).toBe("needs_reauth");
+      expect((await h.jobs()).map((j) => j.status)).toEqual(["superseded", "queued"]);
+    } finally {
+      await other.end();
+    }
   });
 });
 

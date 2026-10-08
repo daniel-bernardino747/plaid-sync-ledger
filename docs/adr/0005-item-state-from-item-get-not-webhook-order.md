@@ -30,7 +30,7 @@ Item states: `active`, `needs_reauth`, `revoked` (terminal).
 
 | Signal | Action |
 | --- | --- |
-| `ITEM_LOGIN_REQUIRED` returned by `/transactions/sync` | Same transaction: Item to `needs_reauth`, job back to `queued` without consuming an attempt. First-hand fact, applied directly. |
+| `ITEM_LOGIN_REQUIRED` returned by `/transactions/sync` | Same transaction: Item to `needs_reauth`, job back to `queued`, and the attempt it was claimed with is given back (the failure is not the job's). First-hand fact, applied directly. A crash before that transaction commits applies nothing; like any crash (ADR 0004) it costs the attempt counted at claim, and the reaper retries the job. |
 | Webhook `ITEM/ERROR`, `LOGIN_REPAIRED`, `USER_PERMISSION_REVOKED` | Enqueue a `refresh_item_status` job. It calls `/item/get` and applies the state implied by the current `item.error`. |
 | Webhook `PENDING_DISCONNECT` / `PENDING_EXPIRATION` | Record `consent_expires_at`. Syncing continues. |
 | Link update mode `onSuccess` | Server enqueues `refresh_item_status`, never trusts the client. If healthy, the Item goes to `active` and a `transactions_sync` job is enqueued, resuming from the stored cursor. |
