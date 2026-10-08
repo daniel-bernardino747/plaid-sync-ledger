@@ -30,9 +30,24 @@ Pages are applied in the order they were received, and within a page in the
 order `added`, `modified`, `removed`. A later `removed` therefore wins over an
 earlier `added` of the same `transaction_id`.
 
-`added` and `modified` are upserts keyed on Plaid's `transaction_id`. `removed`
-is a soft delete (`removed_at` is set), not a physical `DELETE`, so removals
-stay auditable and a late upsert cannot silently resurrect a row.
+`added` and `modified` are upserts keyed on Plaid's `transaction_id`. They
+clear `removed_at`: Plaid reporting a transaction as added or modified means it
+is live. `removed` is a soft delete (`removed_at` is set), not a physical
+`DELETE`, so removals stay auditable: when and what was removed is kept.
+
+What prevents a stale upsert from resurrecting a removed row is **not** the
+soft delete. Within one run, page order handles it (a later `removed` wins).
+Across runs, a run working from an old cursor cannot commit at all, because of
+the cursor compare-and-set (ADR 0004). Making removals irreversible instead
+would be wrong: if Plaid ever reported a removed id as live again, the row
+would stay hidden forever.
+
+> Amended after code review. The first version claimed the soft delete itself
+> stopped "a late upsert" from resurrecting a row, while the code (correctly)
+> clears `removed_at` on upsert. The guarantee comes from the fence, and
+> `packages/core/test/sync.test.ts` ("cannot resurrect a transaction a newer
+> sync already removed") proves it: without the fence, 3 removed transactions
+> come back.
 
 ## Consequences
 

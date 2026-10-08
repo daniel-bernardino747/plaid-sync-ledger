@@ -139,6 +139,54 @@ describe("sync by cursor", () => {
     expect(rows[0].cursor).toBe(h.fake.state().items[0]!.final_cursor);
   });
 
+  it("cannot resurrect a transaction a newer sync already removed", async () => {
+    // ADR 0003 (amended): upserts clear removed_at, because Plaid saying
+    // added/modified means the row is live. What stops a stale upsert from
+    // bringing a removed row back is the cursor fence, and this proves it.
+    const { itemId, plaidItemId } = await h.connect();
+    await h.drain();
+    h.fake.advance(); // batch 1 adds pending transactions; batch 3 settles them (pending removed)
+
+    const zombieAdded: string[] = [];
+    const recording: typeof h.plaid = Object.create(h.plaid);
+    recording.syncTransactions = async (input) => {
+      const page = await h.plaid.syncTransactions(input);
+      zombieAdded.push(...page.added.map((t) => t.transactionId));
+      return page;
+    };
+
+    let once = true;
+    const zombie = await syncItem(
+      syncDeps({
+        plaid: recording,
+        hooks: {
+          onPage: async () => {
+            if (!once) return true;
+            once = false;
+            // The zombie now holds batch 1 in memory. Batches 2 and 3 land and
+            // a healthy worker commits all of it, removing batch 1's pendings.
+            h.fake.releaseSilently(plaidItemId);
+            h.fake.releaseSilently(plaidItemId);
+            await syncItem(syncDeps(), itemId);
+            return true;
+          },
+        },
+      }),
+      itemId,
+    );
+
+    const live = new Set(expectedLedger(h.fake, plaidItemId).map((t) => t.transaction_id));
+    const resurrectable = zombieAdded.filter((id) => !live.has(id));
+    expect(resurrectable.length).toBeGreaterThan(0); // the scenario really contains the hazard
+    expect(zombie.outcome).toBe("cursor_moved");
+    const { rows } = await h.owner.query(
+      `SELECT plaid_transaction_id FROM transactions WHERE plaid_transaction_id = ANY($1) AND removed_at IS NULL`,
+      [resurrectable],
+    );
+    expect(rows).toEqual([]);
+    expect(await h.liveLedger(itemId)).toEqual(expectedLedger(h.fake, plaidItemId));
+  });
+
   it("stores amounts exactly, with no float rounding", async () => {
     await h.connect();
     await h.drain();
