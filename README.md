@@ -143,6 +143,15 @@ that were rejected.
 - The original dedup design (unique `item_id + code + body hash`) would have
   silently dropped legitimate updates. See ADR 0001.
 
+**Schema changes on live data (bonus).** An expand/contract change on 5M rows
+under concurrent writes, with measured lock impact: a plain `CREATE INDEX`
+stalled writes for 4.28 s, while `CONCURRENTLY` never delayed a write by more
+than 63 ms. `SET NOT NULL` via `CHECK ... NOT VALID` + `VALIDATE` kept the worst
+write at 18 ms, against 1.31 s for the direct version. The same document records
+how Prisma Migrate 7.10 actually behaves: migrations are not wrapped in a
+transaction, so `CONCURRENTLY` works but a migration can be half applied. See
+[`docs/migrations-on-live-data.md`](docs/migrations-on-live-data.md).
+
 **Left out, on purpose:**
 
 | What | Why |
@@ -168,6 +177,7 @@ introduced, and how each was caught. The running log is in
 | 3 | The first `serializeError()` accepted any string matching `[A-Za-z0-9_.:-]{1,80}` for `name`, `kind`, `errorCode` and `code`. | A string shaped like `access-sandbox-…` matches that pattern, so a token sitting in an error's `code` property would have been logged under `pg_code`. | Assistant, re-reading the logger right after its tests passed: the test only used a value with spaces, which the pattern rejected for the wrong reason. | Each field now has the exact shape of what it classifies. The test uses token-shaped values under every key. |
 | 4 | The chaos harness released 3 later batches while the fake was started with its default of 4. | Every scenario waited for a batch that was never released and timed out, even though the ledger hash already matched the oracle. | The first `pnpm chaos clean` run timed out with all jobs `succeeded`. Logging the convergence predicate showed `unreleased: 3`. | The fake's batch count is passed from the same constant the harness uses. |
 | 5 | The scenario filter treated the `--` that `pnpm chaos` forwards as a scenario name. | `pnpm chaos` printed a green table with only the `clean` row: a passing chaos run that injected no chaos. | Assistant, reading the output table: one row where seven were expected. | `--` is dropped from argv, and every scenario must now show evidence that its fault actually happened. |
+| 6 | The 5M-row data generator computed amounts as `(g * 7919) % 100000` on the `int4` value from `generate_series`. | Integer overflow once `g` passes ~271k: the full run crashed after a 200k-row rehearsal had passed. | Running the demo at full size (`ERROR: integer out of range`, in `int4mul`). | `g::bigint * 7919`. |
 
 ## Running it
 
@@ -201,5 +211,6 @@ packages/crypto envelope encryption
 packages/log    allowlist logger
 tools/chaos     pnpm chaos
 tools/ops       operational scripts
+tools/migration-demo  expand/contract on 5M rows with measured lock impact
 docs/           ADRs, RCA-001, chaos results, AI errata
 ```
