@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=../../.env src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "node --env-file-if-exists=../../.env src/main.ts"
   },
   "dependencies": {
     "@psl/core": "workspace:*",

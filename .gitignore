@@ -11,3 +11,5 @@ coverage/
 *.log
 packages/db/src/generated/
 .chaos/
+.next/
+next-env.d.ts

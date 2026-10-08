@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "node --env-file-if-exists=../../.env src/main.ts"
   },
   "devDependencies": {
     "@types/node": "24.10.1"

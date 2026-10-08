@@ -15,10 +15,11 @@
  * Uses WebCrypto only, so the same code runs in Node and in Workers.
  */
 
-import type { webcrypto } from "node:crypto";
-
-// Type-only import: erased at runtime, so Workers never load node:crypto.
-type CryptoKey = webcrypto.CryptoKey;
+// Derived from the runtime's own WebCrypto so the same file typechecks under
+// Node types, DOM types (Next.js) and Workers types.
+type CryptoKey = Awaited<ReturnType<typeof globalThis.crypto.subtle.importKey>>;
+/** ArrayBuffer-backed bytes, which is what WebCrypto accepts. */
+type Bytes = Uint8Array<ArrayBuffer>;
 
 const FORMAT = "v1";
 const IV_BYTES = 12;
@@ -75,9 +76,9 @@ export class Keyring {
 
 export interface Envelope {
   keyVersion: number;
-  iv: Uint8Array;
-  ciphertext: Uint8Array;
-  tag: Uint8Array;
+  iv: Bytes;
+  ciphertext: Bytes;
+  tag: Bytes;
 }
 
 export function parseEnvelope(value: string): Envelope {
@@ -98,7 +99,7 @@ export function keyVersionOf(value: string): number {
   return parseEnvelope(value).keyVersion;
 }
 
-async function seal(key: CryptoKey, keyVersion: number, aad: string, plaintext: Uint8Array): Promise<string> {
+async function seal(key: CryptoKey, keyVersion: number, aad: string, plaintext: Bytes): Promise<string> {
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const out = new Uint8Array(
     await subtle.encrypt({ name: "AES-GCM", iv, additionalData: utf8.encode(aad), tagLength: 128 }, key, plaintext),
@@ -108,7 +109,7 @@ async function seal(key: CryptoKey, keyVersion: number, aad: string, plaintext: 
   return [FORMAT, String(keyVersion), toBase64Url(iv), toBase64Url(ct), toBase64Url(tag)].join(".");
 }
 
-async function open(key: CryptoKey, aad: string, env: Envelope): Promise<Uint8Array> {
+async function open(key: CryptoKey, aad: string, env: Envelope): Promise<Bytes> {
   const joined = new Uint8Array(env.ciphertext.length + env.tag.length);
   joined.set(env.ciphertext);
   joined.set(env.tag, env.ciphertext.length);
@@ -126,11 +127,11 @@ async function open(key: CryptoKey, aad: string, env: Envelope): Promise<Uint8Ar
 const DEK_VERSION = 1;
 const dekAad = (userId: string) => `user_keys:${userId}`;
 
-export function generateDek(): Uint8Array {
+export function generateDek(): Bytes {
   return globalThis.crypto.getRandomValues(new Uint8Array(32));
 }
 
-export async function wrapDek(keyring: Keyring, userId: string, dek: Uint8Array, version = keyring.current): Promise<string> {
+export async function wrapDek(keyring: Keyring, userId: string, dek: Bytes, version = keyring.current): Promise<string> {
   return seal(keyring.get(version), version, dekAad(userId), dek);
 }
 
@@ -187,22 +188,22 @@ export async function decryptField(dk: DataKey, ctx: FieldContext, value: string
 
 // ------------------------------------------------------------------ utils
 
-async function importAesKey(raw: Uint8Array): Promise<CryptoKey> {
-  return subtle.importKey("raw", raw as Uint8Array<ArrayBuffer>, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+async function importAesKey(raw: Bytes): Promise<CryptoKey> {
+  return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
-function toBase64Url(bytes: Uint8Array): string {
+function toBase64Url(bytes: Bytes): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(s: string): Uint8Array {
+function fromBase64Url(s: string): Bytes {
   if (!/^[A-Za-z0-9_-]*$/.test(s)) throw new DecryptionError();
   return fromBase64(s.replace(/-/g, "+").replace(/_/g, "/"));
 }
 
-function fromBase64(s: string): Uint8Array {
+function fromBase64(s: string): Bytes {
   const bin = atob(s.padEnd(Math.ceil(s.length / 4) * 4, "="));
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
