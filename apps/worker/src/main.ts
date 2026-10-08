@@ -11,7 +11,7 @@ import { PlaidHttpClient } from "@psl/plaid";
  */
 
 function env(name: string, fallback?: string): string {
-  const v = process.env[name] ?? fallback;
+  const v = process.env[name] || fallback;
   if (v === undefined || v === "") throw new Error(`missing env ${name}`);
   return v;
 }
