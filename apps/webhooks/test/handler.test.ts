@@ -27,9 +27,8 @@ afterAll(async () => {
 
 const env = (connectionString: string): Env => ({
   HYPERDRIVE: { connectionString },
-  PLAID_BASE_URL: fake.url,
-  PLAID_CLIENT_ID: "fake-client-id",
-  PLAID_SECRET: "fake-secret",
+  PLAID_TARGET: "fake",
+  FAKE_PLAID_URL: fake.url,
 });
 
 function signed(itemId: string) {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FakePlaid } from "@psl/plaid-fake";
-import { PlaidCallError, PlaidHttpClient, type SyncPage } from "../src/index.ts";
+import { PlaidCallError, PlaidHttpClient, plaidConfigFromEnv, type SyncPage } from "../src/index.ts";
 
 /**
  * One contract suite, two targets (ADR 0008):
@@ -17,10 +17,7 @@ let client: PlaidHttpClient;
 
 beforeAll(async () => {
   if (target === "sandbox") {
-    const clientId = process.env.PLAID_CLIENT_ID;
-    const secret = process.env.PLAID_SECRET;
-    if (!clientId || !secret) throw new Error("CONTRACT_TARGET=sandbox needs PLAID_CLIENT_ID and PLAID_SECRET");
-    client = new PlaidHttpClient({ baseUrl: "https://sandbox.plaid.com", clientId, secret, timeoutMs: 30_000 });
+    client = new PlaidHttpClient({ ...plaidConfigFromEnv({ ...process.env, PLAID_TARGET: "sandbox" }), timeoutMs: 30_000 });
   } else {
     fake = new FakePlaid({ seed: 7, initialSize: 120, batches: 2 });
     const url = await fake.listen();

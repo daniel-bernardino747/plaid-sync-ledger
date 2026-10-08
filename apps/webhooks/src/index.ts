@@ -1,15 +1,17 @@
 import postgres from "postgres";
 import { log, serializeError } from "@psl/log";
-import { PlaidHttpClient } from "@psl/plaid";
+import { PlaidHttpClient, plaidConfigFromEnv } from "@psl/plaid";
 import { ingestWebhook, type PlaidWebhookBody } from "./ingest.ts";
 import { KeyCache, verifyPlaidWebhook } from "./verify.ts";
 
 export interface Env {
   /** Hyperdrive in production; `localConnectionString` under wrangler dev (ADR 0002). */
   HYPERDRIVE: { connectionString: string };
-  PLAID_BASE_URL: string;
-  PLAID_CLIENT_ID: string;
-  PLAID_SECRET: string;
+  /** See plaidConfigFromEnv (ADR 0008). Secrets come from .dev.vars / `wrangler secret put`. */
+  PLAID_TARGET?: string;
+  FAKE_PLAID_URL?: string;
+  PLAID_CLIENT_ID?: string;
+  PLAID_SECRET?: string;
 }
 
 // Module scope = per isolate. Reused across requests the isolate serves.
@@ -23,9 +25,12 @@ export default {
     if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
 
     const plaid = new PlaidHttpClient({
-      baseUrl: env.PLAID_BASE_URL,
-      clientId: env.PLAID_CLIENT_ID,
-      secret: env.PLAID_SECRET,
+      ...plaidConfigFromEnv({
+        PLAID_TARGET: env.PLAID_TARGET,
+        FAKE_PLAID_URL: env.FAKE_PLAID_URL,
+        PLAID_CLIENT_ID: env.PLAID_CLIENT_ID,
+        PLAID_SECRET: env.PLAID_SECRET,
+      }),
       timeoutMs: 5_000,
     });
     const verified = await verifyPlaidWebhook(request, { plaid, cache });

@@ -3,7 +3,7 @@ import { runWorker, workerDefaults } from "@psl/core";
 import { Keyring } from "@psl/crypto";
 import { createDb } from "@psl/db";
 import { log, serializeError } from "@psl/log";
-import { PlaidHttpClient } from "@psl/plaid";
+import { PlaidHttpClient, plaidConfigFromEnv } from "@psl/plaid";
 
 /**
  * Queue consumer. Connects as app_system (ADR 0007): it processes every
@@ -23,12 +23,7 @@ const keyring = await Keyring.fromEnv({
   MASTER_KEYS: process.env.MASTER_KEYS,
   MASTER_KEY_CURRENT: process.env.MASTER_KEY_CURRENT,
 });
-const plaid = new PlaidHttpClient({
-  baseUrl: env("PLAID_BASE_URL"),
-  clientId: env("PLAID_CLIENT_ID", "fake-client-id"),
-  secret: env("PLAID_SECRET", "fake-secret"),
-  timeoutMs: num("PLAID_TIMEOUT_MS", 10_000),
-});
+const plaid = new PlaidHttpClient({ ...plaidConfigFromEnv(process.env), timeoutMs: num("PLAID_TIMEOUT_MS", 10_000) });
 
 /**
  * Chaos failpoint (ADR 0010): after N transaction upserts inside the commit

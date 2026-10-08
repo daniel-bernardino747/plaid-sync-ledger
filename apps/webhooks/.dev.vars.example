@@ -1,1 +1,4 @@
-PLAID_SECRET=fake-secret
+# Only needed against real Sandbox (ADR 0008). The fake needs nothing here.
+# PLAID_TARGET=sandbox
+# PLAID_CLIENT_ID=
+# PLAID_SECRET=

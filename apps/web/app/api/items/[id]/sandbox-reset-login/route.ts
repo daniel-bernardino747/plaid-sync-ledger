@@ -4,8 +4,9 @@ import { accessTokenFor, enqueueForUser } from "../../../../../lib/items.ts";
 import { HttpError } from "../../../../../lib/session.ts";
 
 /**
- * Demo helper: /sandbox/item/reset_login forces ITEM_LOGIN_REQUIRED (spec,
- * item 4). Plaid also fires the ITEM ERROR webhook; a sync is enqueued too so
+ * Spec, item 4: "Testar provocando o erro com /sandbox/item/reset_login".
+ * Forces ITEM_LOGIN_REQUIRED. Only fake and Sandbox targets exist, so this
+ * endpoint cannot reach a production Item. Plaid also fires the ITEM ERROR webhook; a sync is enqueued too so
  * the failure is observed even without a reachable webhook URL.
  */
 export const POST = async (request: Request, ctx: RouteContext<"/api/items/[id]/sandbox-reset-login">) =>
@@ -14,9 +15,6 @@ export const POST = async (request: Request, ctx: RouteContext<"/api/items/[id]/
     const { id } = await ctx.params;
     if (!UUID.test(id)) throw new HttpError(400, "invalid item id");
     const deps = await getDeps();
-    if (deps.realPlaid && !/sandbox\.plaid\.com/.test(process.env.PLAID_BASE_URL ?? "")) {
-      throw new HttpError(403, "sandbox only");
-    }
     await deps.plaid.resetLogin(await accessTokenFor(deps, userId, id));
     await enqueueForUser(deps, userId, id, "transactions_sync");
     return Response.json({ ok: true });

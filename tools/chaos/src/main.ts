@@ -125,7 +125,7 @@ const template = await createTestDatabase("chaos_template");
 const fakeLog = openLog(`${OUT}fake.log`);
 const fake = startProc("fake", process.execPath, ["src/main.ts"], {
   cwd: `${ROOT}packages/plaid-fake`,
-  env: { ...process.env, FAKE_PLAID_PORT: String(FAKE_PORT), FAKE_PLAID_SEED: String(SEED), FAKE_PLAID_BATCHES: String(LATER_BATCHES), PLAID_CLIENT_ID: "", PLAID_SECRET: "" },
+  env: { ...process.env, FAKE_PLAID_PORT: String(FAKE_PORT), FAKE_PLAID_SEED: String(SEED), FAKE_PLAID_BATCHES: String(LATER_BATCHES) },
   log: fakeLog,
 });
 await waitFor("plaid fake", async () => (await control("state")) !== null, 15_000);
@@ -176,7 +176,8 @@ async function runScenario(s: Scenario): Promise<Result> {
   const web = createDb(urls.web);
   try {
     // The real webhook Worker, pointed at this scenario's database.
-    const wrangler = startProc("wrangler", "pnpm", ["exec", "wrangler", "dev", "--port", String(WORKER_PORT), "--ip", "127.0.0.1"], {
+    const wrangler = startProc("wrangler", "pnpm", ["exec", "wrangler", "dev", "--port", String(WORKER_PORT), "--ip", "127.0.0.1",
+      "--var", "PLAID_TARGET:fake", "--var", `FAKE_PLAID_URL:${FAKE_URL}`], {
       cwd: `${ROOT}apps/webhooks`,
       env: {
         ...process.env,
@@ -205,9 +206,9 @@ async function runScenario(s: Scenario): Promise<Result> {
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         DATABASE_URL_SYSTEM: urls.system,
-        PLAID_BASE_URL: FAKE_URL,
-        PLAID_CLIENT_ID: "fake-client-id",
-        PLAID_SECRET: "fake-secret",
+        // Forced: chaos must never reach real Plaid, whatever .env says.
+        PLAID_TARGET: "fake",
+        FAKE_PLAID_URL: FAKE_URL,
         MASTER_KEYS,
         MASTER_KEY_CURRENT: "1",
         WORKER_ID: `${s.name}-w${i}-${Date.now()}`,

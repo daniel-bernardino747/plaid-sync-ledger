@@ -3,8 +3,6 @@ import { FakePlaid } from "./server.ts";
 const fake = new FakePlaid({
   port: Number(process.env.FAKE_PLAID_PORT ?? 4010),
   seed: Number(process.env.FAKE_PLAID_SEED ?? 42),
-  clientId: process.env.PLAID_CLIENT_ID || "fake-client-id",
-  secret: process.env.PLAID_SECRET || "fake-secret",
   initialSize: Number(process.env.FAKE_PLAID_INITIAL_SIZE ?? 230),
   batches: Number(process.env.FAKE_PLAID_BATCHES ?? 4),
   defaultWebhook: process.env.FAKE_PLAID_WEBHOOK_URL ?? null,

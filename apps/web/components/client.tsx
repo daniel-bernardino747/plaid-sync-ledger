@@ -70,12 +70,12 @@ function LinkLauncher({ linkToken, onSuccess, onDone }: { linkToken: string; onS
   return null;
 }
 
-export function ConnectButtons({ realPlaid }: { realPlaid: boolean }) {
+export function ConnectButtons({ linkAvailable }: { linkAvailable: boolean }) {
   const { busy, error, run } = useAction();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   return (
     <div className="row">
-      {realPlaid && (
+      {linkAvailable && (
         <button
           className="primary"
           disabled={busy}
@@ -99,14 +99,14 @@ export function ConnectButtons({ realPlaid }: { realPlaid: boolean }) {
   );
 }
 
-export function ItemActions({ itemId, status, realPlaid }: { itemId: string; status: string; realPlaid: boolean }) {
+export function ItemActions({ itemId, status, linkAvailable }: { itemId: string; status: string; linkAvailable: boolean }) {
   const { busy, error, run } = useAction();
   const [linkToken, setLinkToken] = useState<string | null>(null);
 
   if (status === "needs_reauth") {
     return (
       <div className="row">
-        {realPlaid ? (
+        {linkAvailable ? (
           <button
             className="primary"
             disabled={busy}

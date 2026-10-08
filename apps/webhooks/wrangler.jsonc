@@ -16,8 +16,9 @@
     }
   ],
   "vars": {
-    "PLAID_BASE_URL": "http://127.0.0.1:4010",
-    "PLAID_CLIENT_ID": "fake-client-id"
+    "PLAID_TARGET": "fake",
+    "FAKE_PLAID_URL": "http://127.0.0.1:4010"
   }
-  // PLAID_SECRET comes from .dev.vars locally and `wrangler secret put` in production.
+  // For PLAID_TARGET=sandbox, put PLAID_TARGET, PLAID_CLIENT_ID and PLAID_SECRET
+  // in .dev.vars locally (never in this file).
 }
