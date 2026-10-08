@@ -87,15 +87,16 @@ database and hashed by the same `ledger_hash()` SQL.
 
 | Scenario | Fault injected | Result | Ledger hash | Sync runs | Superseded | Webhook deliveries | Kills | Time |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `clean` | none (baseline) | PASS | `e99a82b6fd76` | 11 | 0 | 12 | 0 | 15s |
+| `clean` | none (baseline) | PASS | `e99a82b6fd76` | 11 | 0 | 12 | 0 | 14s |
 | `kill-mid-commit` | SIGKILL after 60 upserts inside the commit, 3 times, restart | PASS | `e99a82b6fd76` | 4 | 3 | 12 | 3 | 14s |
-| `webhook-x10` | every webhook delivered 10 times | PASS | `e99a82b6fd76` | 13 | 0 | 120 | 0 | 12s |
-| `two-workers` | 2 worker processes + every webhook 3 times | PASS | `e99a82b6fd76` | 13 | 0 | 36 | 0 | 12s |
+| `webhook-x10` | every webhook delivered 10 times | PASS | `e99a82b6fd76` | 12 | 0 | 120 | 0 | 13s |
+| `two-workers` | 2 worker processes + every webhook 3 times | PASS | `e99a82b6fd76` | 14 | 0 | 36 | 0 | 13s |
 | `mutation-page-2` | MUTATION_DURING_PAGINATION on page 2 of every update | PASS | `e99a82b6fd76` | 11 | 0 | 12 | 0 | 12s |
-| `plaid-500` | 30% of Plaid calls answer 500 | PASS | `e99a82b6fd76` | 9 | 1 | 12 | 0 | 13s |
-| `plaid-timeout` | 30% of Plaid calls stall past the 1s client timeout | PASS | `e99a82b6fd76` | 3 | 3 | 12 | 0 | 26s |
+| `plaid-500` | 30% of Plaid calls answer 500 | PASS | `e99a82b6fd76` | 9 | 0 | 12 | 0 | 13s |
+| `plaid-timeout` | 30% of Plaid calls stall past the 1s client timeout | PASS | `e99a82b6fd76` | 3 | 3 | 12 | 0 | 28s |
 
-Oracle hash: `e99a82b6fd76`. Besides the hash, every row asserts that there
+Oracle hash: `e99a82b6fd76`. Run-to-run, the hash is fixed while sync-run counts
+and timings vary with process scheduling, which is the point. Besides the hash, every row asserts that there
 are no dead jobs, no running job with an expired lease, that every Item's
 cursor equals Plaid's final cursor, that webhooks really went through the
 Worker, that the injected fault was **observed** in the process output
