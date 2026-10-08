@@ -1,7 +1,7 @@
 import type { Db } from "@psl/db";
 import type { Keyring } from "@psl/crypto";
 import { log, serializeError } from "@psl/log";
-import { PlaidCallError, type PlaidGateway } from "@psl/plaid";
+import { ITEM_LOGIN_REQUIRED, PlaidCallError, type PlaidGateway } from "@psl/plaid";
 import {
   backoffMs,
   claimJob,
@@ -18,6 +18,12 @@ import {
 import { refreshItemStatus } from "./refresh.ts";
 import { LeaseLostError, syncItem, type SyncHooks } from "./sync.ts";
 
+/** Chaos failpoints (ADR 0010): after N upserts inside the commit, after N fetched pages. */
+export interface WorkerHooks {
+  afterUpsert?: SyncHooks["afterUpsert"];
+  afterPage?: (pages: number) => void | Promise<void>;
+}
+
 export interface WorkerConfig {
   db: Db; // app_system
   plaid: PlaidGateway;
@@ -30,8 +36,7 @@ export interface WorkerConfig {
   /** Safety-net cadence and staleness threshold (roadmap, block 3). */
   safetyNetEveryMs: number;
   staleAfterSeconds: number;
-  /** Chaos failpoints (ADR 0010): after N upserts inside the commit, after N fetched pages. */
-  hooks?: Pick<SyncHooks, "afterUpsert"> & { afterPage?: (pages: number) => void | Promise<void> };
+  hooks?: WorkerHooks;
   rand?: () => number;
 }
 
@@ -110,7 +115,7 @@ async function handleFailure(cfg: WorkerConfig, job: ClaimedJob, e: unknown, bas
   if (e instanceof PlaidCallError && e.kind === "item_login_required") {
     // First-hand signal (ADR 0005): stop syncing, do not burn an attempt. The
     // claim query skips non-active Items, so the requeued job waits for repair.
-    const r = await parkForReauth(cfg.db, job, cfg.workerId, { errorCode: e.errorCode ?? "ITEM_LOGIN_REQUIRED" });
+    const r = await parkForReauth(cfg.db, job, cfg.workerId, { errorCode: e.errorCode ?? ITEM_LOGIN_REQUIRED });
     log.warn("job.item_needs_reauth", { ...base, outcome: r });
     return;
   }

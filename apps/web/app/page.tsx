@@ -54,7 +54,7 @@ export default async function Home() {
         <LogoutButton />
       </header>
 
-      <ConnectButtons linkAvailable={deps.plaidTarget === "sandbox"} />
+      <ConnectButtons linkAvailable={deps.linkAvailable} />
 
       <h2>Connected items</h2>
       {data.items.length === 0 ? (
@@ -83,7 +83,7 @@ export default async function Home() {
                   <td className="muted">{i.lastSyncedAt ? i.lastSyncedAt.toISOString().replace("T", " ").slice(0, 19) : "never"}</td>
                   <td className="num">{i._count.transactions}</td>
                   <td>
-                    <ItemActions itemId={i.id} status={i.status} linkAvailable={deps.plaidTarget === "sandbox"} />
+                    <ItemActions itemId={i.id} status={i.status} linkAvailable={deps.linkAvailable} />
                   </td>
                 </tr>
               ))}

@@ -24,13 +24,9 @@ export default {
     if (url.pathname !== "/plaid/webhook") return new Response("not found", { status: 404 });
     if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
 
+    const { HYPERDRIVE: _db, ...plaidEnv } = env;
     const plaid = new PlaidHttpClient({
-      ...plaidConfigFromEnv({
-        PLAID_TARGET: env.PLAID_TARGET,
-        FAKE_PLAID_URL: env.FAKE_PLAID_URL,
-        PLAID_CLIENT_ID: env.PLAID_CLIENT_ID,
-        PLAID_SECRET: env.PLAID_SECRET,
-      }),
+      ...plaidConfigFromEnv(plaidEnv),
       timeoutMs: 5_000,
     });
     const verified = await verifyPlaidWebhook(request, { plaid, cache });

@@ -57,7 +57,7 @@ export function classifyPlaidError(
   if (errorCode === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") {
     return new PlaidCallError("mutation_during_pagination", info);
   }
-  if (errorCode === "ITEM_LOGIN_REQUIRED") return new PlaidCallError("item_login_required", info);
+  if (errorCode === ITEM_LOGIN_REQUIRED) return new PlaidCallError("item_login_required", info);
   if (errorType === "RATE_LIMIT_EXCEEDED") return new PlaidCallError("rate_limited", info);
   if (errorType === "API_ERROR" || errorType === "INSTITUTION_ERROR") {
     return new PlaidCallError("transient", info);
@@ -71,6 +71,9 @@ export function classifyPlaidError(
   return new PlaidCallError("fatal", info);
 }
 
+/** Plaid's error code for an Item whose login must be repaired through Link update mode. */
+export const ITEM_LOGIN_REQUIRED = "ITEM_LOGIN_REQUIRED";
+
 export type ItemHealth = "healthy" | "needs_reauth" | "revoked" | "unchanged";
 
 /**
@@ -81,7 +84,7 @@ export type ItemHealth = "healthy" | "needs_reauth" | "revoked" | "unchanged";
  */
 export function classifyItemHealth(errorCode: string | null): ItemHealth {
   if (errorCode === null) return "healthy";
-  if (errorCode === "ITEM_LOGIN_REQUIRED") return "needs_reauth";
+  if (errorCode === ITEM_LOGIN_REQUIRED) return "needs_reauth";
   if (errorCode === "USER_PERMISSION_REVOKED") return "revoked";
   return "unchanged";
 }

@@ -13,8 +13,10 @@ export interface Deps {
   plaid: PlaidHttpClient;
   sessionSecret: string;
   webhookUrl: string | null;
-  /** fake or sandbox (ADR 0008). The Link UI can only run against Sandbox. */
+  /** fake or sandbox (ADR 0008). */
   plaidTarget: PlaidTarget;
+  /** The Plaid Link UI only runs against real Plaid. */
+  linkAvailable: boolean;
 }
 
 let deps: Promise<Deps> | null = null;
@@ -36,6 +38,7 @@ export function getDeps(): Promise<Deps> {
       sessionSecret: secret,
       webhookUrl: process.env.PLAID_WEBHOOK_URL || null,
       plaidTarget: plaidConfig.target,
+      linkAvailable: plaidConfig.target === "sandbox",
     };
   })();
   return deps;

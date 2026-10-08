@@ -1,4 +1,5 @@
 import { sqlState, type Db, type JobKind } from "@psl/db";
+import { ITEM_LOGIN_REQUIRED } from "@psl/plaid";
 
 /**
  * The job queue is a Postgres table (ADR 0001, ADR 0004). No broker.
@@ -148,7 +149,7 @@ export async function parkForReauth(
   workerId: string,
   opts: { errorCode?: string; afterItemUpdate?: () => Promise<void> } = {},
 ): Promise<"queued" | "superseded" | "lost"> {
-  const errorCode = opts.errorCode ?? "ITEM_LOGIN_REQUIRED";
+  const errorCode = opts.errorCode ?? ITEM_LOGIN_REQUIRED;
   for (let attempt = 0; ; attempt++) {
     try {
       return await db.$transaction(async (tx) => {
