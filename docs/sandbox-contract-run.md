@@ -35,5 +35,27 @@ Before that fix, 4 of 5 runs passed and 1 failed intermittently.
   tunnel to port 8787). The webhook path is covered with real ES256 signatures
   produced by the fake: `apps/webhooks/test/*.test.ts` and every `pnpm chaos`
   scenario.
-- Plaid Link UI flows (new connection and update mode). They need a browser
-  and are exercised manually; see the section below once recorded.
+- Plaid Link UI flows. They need a browser and were exercised manually, see
+  below.
+
+## Manual run: Plaid Link and update mode (2026-10-08)
+
+Web app and worker with `PLAID_TARGET=sandbox` (webhook URL unset, since
+Sandbox cannot reach localhost). A person drove the browser; the sequence below
+was read back from the database and the worker log afterwards.
+
+| Time (UTC) | Step | Observed |
+| --- | --- | --- |
+| 17:13:39 | Connect a bank through Plaid Link (`user_good`) | `/plaid/exchange` 200; first sync committed 20 transactions in 1 page |
+| 17:13:45 | "Simulate login required" (`/sandbox/item/reset_login`) | the sync got `ITEM_LOGIN_REQUIRED`; Item `needs_reauth`; the job was requeued with `attempts = 0` |
+| 17:14:54 | "Reconnect": Link in update mode, then `/reauth-complete` | `refresh_item_status` read `/item/get` and set the Item `active` |
+| 17:14:56 | Sync resumes | the parked job ran and fetched **3** transactions (20 + 3 = 23 live). A from-scratch resync would have fetched 23: it resumed from the saved cursor |
+| 17:15:08 | "Simulate login required" clicked once more | Item `needs_reauth` again, job queued with `attempts = 0` (expected) |
+
+No access token or public token appeared in the web or worker output.
+
+Two `502` responses in the same session came from pressing "Simulate login
+required" on an Item created earlier against the **fake**: its access token is
+not valid in Sandbox. Items do not record which target created them, so mixing
+targets in one database produces this. Use a fresh database (or delete fake
+Items) when switching `PLAID_TARGET`.
