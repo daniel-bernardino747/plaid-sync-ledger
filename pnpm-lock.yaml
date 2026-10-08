@@ -173,6 +173,28 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  apps/worker:
+    dependencies:
+      '@psl/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@psl/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
+      '@psl/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@psl/log':
+        specifier: workspace:*
+        version: link:../../packages/log
+      '@psl/plaid':
+        specifier: workspace:*
+        version: link:../../packages/plaid
+    devDependencies:
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+
   packages/core:
     dependencies:
       '@psl/crypto':
