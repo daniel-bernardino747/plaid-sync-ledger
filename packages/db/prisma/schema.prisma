@@ -1,0 +1,175 @@
+// Schema notes:
+// - Row-level security, roles, the coalescing partial index and the ledger view
+//   are not expressible in Prisma; they live in hand-written SQL inside the
+//   migrations (see migrations/*/migration.sql and ADRs 0001, 0007, 0009).
+// - Every user-owned table carries user_id so RLS can scope it directly.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  key          UserKey?
+  items        Item[]
+  accounts     Account[]
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+// One data encryption key per user, wrapped by the master key (ADR 0006).
+model UserKey {
+  userId           String    @id @map("user_id") @db.Uuid
+  wrappedDek       String    @map("wrapped_dek")
+  masterKeyVersion Int       @map("master_key_version")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  rotatedAt        DateTime? @map("rotated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([masterKeyVersion])
+  @@map("user_keys")
+}
+
+enum ItemStatus {
+  active
+  needs_reauth
+  revoked
+
+  @@map("item_status")
+}
+
+model Item {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  plaidItemId      String     @unique @map("plaid_item_id")
+  // Envelope-encrypted, AAD-bound to this row and user (ADR 0006). Never plaintext.
+  accessTokenCt    String     @map("access_token_ct")
+  status           ItemStatus @default(active)
+  // Only ever advanced by the compare-and-set in the sync commit (ADR 0004).
+  cursor           String?
+  consentExpiresAt DateTime?  @map("consent_expires_at") @db.Timestamptz(3)
+  lastSyncedAt     DateTime?  @map("last_synced_at") @db.Timestamptz(3)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts     Account[]
+  transactions Transaction[]
+  jobs         SyncJob[]
+
+  @@index([userId])
+  @@map("items")
+}
+
+model Account {
+  plaidAccountId String   @id @map("plaid_account_id")
+  userId         String   @map("user_id") @db.Uuid
+  itemId         String   @map("item_id") @db.Uuid
+  name           String
+  mask           String?
+  type           String
+  subtype        String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item         Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([itemId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Transaction {
+  plaidTransactionId   String    @id @map("plaid_transaction_id")
+  userId               String    @map("user_id") @db.Uuid
+  itemId               String    @map("item_id") @db.Uuid
+  plaidAccountId       String    @map("plaid_account_id")
+  // NUMERIC, never float (ADR 0009).
+  amount               Decimal   @db.Decimal(19, 4)
+  isoCurrencyCode      String?   @map("iso_currency_code")
+  date                 DateTime  @db.Date
+  authorizedDate       DateTime? @map("authorized_date") @db.Date
+  name                 String
+  merchantName         String?   @map("merchant_name")
+  pending              Boolean
+  pendingTransactionId String?   @map("pending_transaction_id")
+  // Soft delete for Plaid `removed` (ADR 0003).
+  removedAt            DateTime? @map("removed_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [plaidAccountId], references: [plaidAccountId], onDelete: Cascade)
+
+  @@index([userId, date(sort: Desc)])
+  @@index([itemId])
+  @@map("transactions")
+}
+
+// Append-only audit log of verified webhooks. Deliberately NO unique
+// constraint on dedup_key: redeliveries must stay visible (ADR 0001).
+model WebhookEvent {
+  id          BigInt   @id @default(autoincrement())
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+  plaidItemId String?  @map("plaid_item_id")
+  webhookType String   @map("webhook_type")
+  webhookCode String   @map("webhook_code")
+  dedupKey    String   @map("dedup_key")
+  bodySha256  String   @map("body_sha256")
+
+  @@index([dedupKey])
+  @@index([plaidItemId, receivedAt])
+  @@map("webhook_events")
+}
+
+enum JobKind {
+  transactions_sync
+  refresh_item_status
+
+  @@map("job_kind")
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  superseded
+  dead
+
+  @@map("job_status")
+}
+
+// The queue. Coalescing index (one queued job per item and kind) is in SQL.
+model SyncJob {
+  id            BigInt    @id @default(autoincrement())
+  itemId        String    @map("item_id") @db.Uuid
+  kind          JobKind
+  status        JobStatus @default(queued)
+  attempts      Int       @default(0)
+  runAt         DateTime  @default(now()) @map("run_at") @db.Timestamptz(3)
+  leaseUntil    DateTime? @map("lease_until") @db.Timestamptz(3)
+  lockedBy      String?   @map("locked_by")
+  lastErrorCode String?   @map("last_error_code")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([itemId, status])
+  @@map("sync_jobs")
+}
