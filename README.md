@@ -1,5 +1,7 @@
 # plaid-sync-ledger
 
+[![ci](https://github.com/daniel-bernardino747/plaid-sync-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel-bernardino747/plaid-sync-ledger/actions/workflows/ci.yml)
+
 A small system that keeps a per-user ledger of bank transactions in sync with
 Plaid, and stays correct when things fail halfway: duplicate and out-of-order
 webhooks, workers killed mid-commit, concurrent workers, Plaid `500`s and
