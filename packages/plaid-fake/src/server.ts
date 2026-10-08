@@ -274,6 +274,14 @@ export class FakePlaid {
         return { ok: true };
       case "/__control/state":
         return this.state();
+      case "/__control/expected":
+        // Ground truth for the chaos oracle: the live ledger after a full sync.
+        return {
+          items: [...this.#items.values()].map((i) => ({
+            item_id: i.itemId,
+            transactions: this.expectedLedger(i.itemId).map(txOut),
+          })),
+        };
       default:
         throw new PlaidError(404, "INVALID_REQUEST", "NOT_FOUND", "unknown control path");
     }
