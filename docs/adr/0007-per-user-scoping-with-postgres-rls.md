@@ -34,11 +34,16 @@ filters only as a second layer.
   - `app_system` is used by `apps/worker`, `apps/webhooks`, and scripts. It has
     `BYPASSRLS` because it processes every user's Items. It is never used to
     serve a user request.
-- A Prisma Client extension in `packages/db` (`forUser(userId)`) runs each
-  operation inside a transaction that first executes
-  `SELECT set_config('app.user_id', $1, true)` (transaction-local, the same
-  effect as `SET LOCAL`). The setting cannot leak to the next request that
-  reuses the pooled connection.
+- `forUser(db, userId, fn)` in `packages/db` runs `fn` inside an interactive
+  transaction that first executes `SELECT set_config('app.user_id', $1, true)`
+  (transaction-local, the same effect as `SET LOCAL`). The setting cannot leak
+  to the next request that reuses the pooled connection. A plain function was
+  chosen over a Prisma Client extension because it also covers raw SQL
+  (`enqueue_job`) and keeps the transaction boundary visible at the call site.
+- `sync_jobs` and `webhook_events` have no `user_id`, so `app_web` gets no
+  privileges on them at all. It enqueues work only through the
+  `SECURITY DEFINER` function `enqueue_job(item_id, kind)`, which checks that
+  the Item belongs to the current user.
 - Policies and roles live in a hand-written SQL migration, because Prisma does
   not model RLS.
 
