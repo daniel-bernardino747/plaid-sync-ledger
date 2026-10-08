@@ -33,3 +33,13 @@ export async function forUser<T>(db: Db, userId: string, fn: (tx: Tx) => Promise
     return fn(tx);
   });
 }
+
+/**
+ * The Postgres SQLSTATE behind a Prisma error (e.g. "23505"), or null.
+ * Classify database errors with this, never by matching message text.
+ */
+export function sqlState(e: unknown): string | null {
+  const code = (e as { meta?: { driverAdapterError?: { cause?: { originalCode?: unknown } } } } | null)?.meta
+    ?.driverAdapterError?.cause?.originalCode;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) ? code : null;
+}
