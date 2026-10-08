@@ -29,8 +29,10 @@ bank.
   with AES-GCM under the master key, with AAD `user_keys:<user_id>`.
 
 **Ciphertext format.** A single `text` column:
-`v1.<master_key_version>.<iv>.<ciphertext>.<tag>` (base64url segments). The
-leading `v1` is the format version.
+`v1.<key_version>.<iv>.<ciphertext>.<tag>` (base64url segments). The leading
+`v1` is the format version. For a wrapped DEK, `key_version` is the master key
+version. For a field, it is the DEK version, always `1` until DEK rotation
+exists. Both use the same envelope code.
 
 **AAD binding.** Field ciphertexts use AAD
 `<table>.<column>:<row_id>:<user_id>`. A ciphertext copied to another row,
