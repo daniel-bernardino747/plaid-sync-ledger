@@ -199,9 +199,8 @@ introduced, and how each was caught. The running log is in
 Requirements: Node 24+, pnpm (via `corepack enable`), Docker.
 
 ```sh
-pnpm install
-cp .env.example .env              # then fill MASTER_KEYS (pnpm --filter @psl/crypto keygen) and SESSION_SECRET
-cp apps/webhooks/.dev.vars.example apps/webhooks/.dev.vars
+pnpm install                      # also generates the Prisma client
+pnpm init:env                     # creates .env with fresh keys (never overwrites)
 pnpm db:up && pnpm db:migrate && pnpm --filter @psl/db seed
 
 pnpm dev                          # fake Plaid :4010, webhook Worker :8787, worker, web :3000

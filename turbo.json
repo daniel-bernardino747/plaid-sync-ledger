@@ -3,7 +3,9 @@
   "tasks": {
     "build": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "^generate",
+        "generate"
       ],
       "outputs": [
         "dist/**",
@@ -13,19 +15,31 @@
     },
     "typecheck": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "^generate",
+        "generate"
       ]
     },
     "lint": {},
     "test": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "^generate",
+        "generate"
       ],
       "cache": false
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": [
+        "^generate",
+        "generate"
+      ]
+    },
+    "generate": {
+      "cache": false,
+      "outputs": []
     }
   },
   "agentGuidance": false

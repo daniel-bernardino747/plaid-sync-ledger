@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "rotate-master-key": "node --env-file-if-exists=../../.env src/rotate-master-key.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "init:env": "node src/init-env.ts"
   },
   "dependencies": {
     "@psl/core": "workspace:*",

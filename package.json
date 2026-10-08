@@ -15,7 +15,9 @@
     "db:reset": "pnpm --filter @psl/db migrate:reset",
     "chaos": "pnpm --filter @psl/chaos chaos --",
     "rotate-master-key": "pnpm --filter @psl/ops rotate-master-key --",
-    "dev": "turbo run dev"
+    "dev": "turbo run dev",
+    "postinstall": "pnpm --filter @psl/db generate",
+    "init:env": "pnpm --filter @psl/ops init:env"
   },
   "devDependencies": {
     "turbo": "2.11.7",
