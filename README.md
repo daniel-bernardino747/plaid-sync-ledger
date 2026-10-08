@@ -91,14 +91,14 @@ database and hashed by the same `ledger_hash()` SQL.
 
 | Scenario | Fault injected | Result | Ledger hash | Sync runs | Superseded | Webhook deliveries | Kills | Time |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `clean` | none (baseline) | PASS | `e99a82b6fd76` | 11 | 0 | 12 | 0 | 14s |
-| `kill-mid-pagination` | SIGKILL after fetching page 2, before anything is written, 3 times, restart | PASS | `e99a82b6fd76` | 4 | 2 | 12 | 3 | 12s |
-| `kill-mid-commit` | SIGKILL after 60 upserts inside the commit (FAIL_AFTER_N_UPSERTS), 3 times, restart | PASS | `e99a82b6fd76` | 5 | 2 | 12 | 3 | 13s |
-| `webhook-x10` | every webhook delivered 10 times | PASS | `e99a82b6fd76` | 13 | 0 | 120 | 0 | 13s |
+| `clean` | none (baseline) | PASS | `e99a82b6fd76` | 9 | 0 | 12 | 0 | 16s |
+| `kill-mid-pagination` | SIGKILL after fetching page 2, before anything is written, 3 times, restart | PASS | `e99a82b6fd76` | 4 | 3 | 12 | 3 | 14s |
+| `kill-mid-commit` | SIGKILL after 60 upserts inside the commit (FAIL_AFTER_N_UPSERTS), 3 times, restart | PASS | `e99a82b6fd76` | 4 | 3 | 12 | 3 | 14s |
+| `webhook-x10` | every webhook delivered 10 times | PASS | `e99a82b6fd76` | 14 | 0 | 120 | 0 | 12s |
 | `two-workers` | 2 worker processes + every webhook 3 times | PASS | `e99a82b6fd76` | 14 | 0 | 36 | 0 | 13s |
-| `mutation-page-2` | MUTATION_DURING_PAGINATION on page 2 of every update | PASS | `e99a82b6fd76` | 11 | 0 | 12 | 0 | 12s |
-| `plaid-500` | 30% of Plaid calls answer 500 | PASS | `e99a82b6fd76` | 7 | 0 | 12 | 0 | 13s |
-| `plaid-timeout` | 30% of Plaid calls stall past the 1s client timeout | PASS | `e99a82b6fd76` | 3 | 3 | 12 | 0 | 26s |
+| `mutation-page-2` | MUTATION_DURING_PAGINATION on page 2 of every update | PASS | `e99a82b6fd76` | 9 | 0 | 12 | 0 | 13s |
+| `plaid-500` | 30% of Plaid calls answer 500 | PASS | `e99a82b6fd76` | 8 | 0 | 12 | 0 | 14s |
+| `plaid-timeout` | 30% of Plaid calls stall past the 1s client timeout | PASS | `e99a82b6fd76` | 3 | 3 | 12 | 0 | 27s |
 
 Oracle hash: `e99a82b6fd76`. Run-to-run, the hash is fixed while sync-run counts
 and timings vary with process scheduling, which is the point. Besides the hash, every row asserts that there
