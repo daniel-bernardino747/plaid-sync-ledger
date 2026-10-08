@@ -26,6 +26,14 @@ carrying a Plaid response.
    parameters.
 3. **ESLint `no-console` is an error** in every app and package except the
    logger itself.
+   Operator scripts (`tools/chaos`, `tools/migration-demo`, `tools/ops`,
+   `packages/db/scripts`, `packages/crypto/scripts`, the fake's entry point)
+   may write their own reports to stdout. The rule for them is the same as for
+   logs: no error messages, no request or response data, no user data. Only
+   harness-owned labels, counts, hashes and timings. (The canary scan covers
+   the processes the chaos harness starts, not the harness's own stdout; that
+   is kept clean by construction: it prints fixed labels, never an error's
+   message.)
 4. **Canary tests.** A fast one in `pnpm test`
    (`packages/core/test/no-secrets-in-logs.test.ts`) drives the worker through
    success, retries, timeouts, a crash inside the commit, a dead job and

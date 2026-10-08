@@ -6,7 +6,7 @@ import { Keyring, newMasterKey } from "@psl/crypto";
 import { createDb } from "@psl/db";
 import { createTestDatabase } from "@psl/db/testing";
 import { parsePlaidJson, PlaidHttpClient } from "@psl/plaid";
-import { openLog, sleep, startProc, waitFor, type Proc } from "./procs.ts";
+import { HarnessTimeout, openLog, sleep, startProc, waitFor, type Proc } from "./procs.ts";
 
 /**
  * pnpm chaos (ADR 0010).
@@ -252,7 +252,8 @@ async function runScenario(s: Scenario): Promise<Result> {
     await sleep(1_500); // settle: nothing new must start
     if (!(await converged(owner))) checks.push("did not stay converged");
   } catch (e) {
-    checks.push(e instanceof Error ? e.message : "scenario error");
+    // Never print an error message: it can carry request data (ADR 0013).
+    checks.push(e instanceof HarnessTimeout ? `timed out waiting for ${e.label}` : "scenario_error");
   } finally {
     stopping = true;
     for (const p of procs.reverse()) await p.stop();

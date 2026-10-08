@@ -62,6 +62,16 @@ export function openLog(path: string): WriteStream {
   return createWriteStream(path, { flags: "w" });
 }
 
+/** Carries only a harness-owned label, so it is safe to print (ADR 0013). */
+export class HarnessTimeout extends Error {
+  readonly label: string;
+  constructor(label: string) {
+    super("harness timeout");
+    this.name = "HarnessTimeout";
+    this.label = label;
+  }
+}
+
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export async function waitFor(what: string, check: () => Promise<boolean>, timeoutMs: number, everyMs = 250): Promise<void> {
@@ -72,5 +82,5 @@ export async function waitFor(what: string, check: () => Promise<boolean>, timeo
     } catch {}
     await sleep(everyMs);
   }
-  throw new Error(`timed out waiting for ${what}`);
+  throw new HarnessTimeout(what);
 }

@@ -1,5 +1,5 @@
 import { decryptAccessToken, loadDataKey } from "@psl/core";
-import { forUser } from "@psl/db";
+import { forUser, sqlState } from "@psl/db";
 import type { Deps } from "./deps.ts";
 import { HttpError } from "./session.ts";
 
@@ -28,7 +28,8 @@ export async function enqueueForUser(
   try {
     await forUser(deps.webDb, userId, (tx) => tx.$executeRaw`SELECT enqueue_job(${itemId}::uuid, ${kind}::job_kind)`);
   } catch (e) {
-    if (/item not found/.test(String((e as Error).message))) throw new HttpError(404, "item not found");
+    // enqueue_job() raises P0002 (no_data_found) for an Item the user does not own.
+    if (sqlState(e) === "P0002") throw new HttpError(404, "item not found");
     throw e;
   }
 }
