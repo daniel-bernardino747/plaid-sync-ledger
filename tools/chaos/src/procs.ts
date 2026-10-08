@@ -26,6 +26,9 @@ export function startProc(
     stdio: ["ignore", "pipe", "pipe"],
     shell: opts.shell ?? false,
     windowsHide: true,
+    // On POSIX, a process group of its own, so killTree() can signal the whole
+    // tree (wrangler spawns workerd) with kill(-pid). Windows uses taskkill /T.
+    detached: process.platform !== "win32",
   });
   const tag = (chunk: Buffer) => opts.log.write(chunk.toString("utf8").replace(/^(?=.)/gm, `[${name}] `));
   child.stdout?.on("data", tag);
