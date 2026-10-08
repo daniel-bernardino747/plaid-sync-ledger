@@ -415,7 +415,8 @@ export class FakePlaid {
       accounts: item.dataset.accounts.map((a) => ({ ...a, balances: { available: null, current: null, iso_currency_code: "USD" } })),
       next_cursor: hasMore ? enc({ i: item.itemId, o: cur.o, h: target, p: page + 1 }) : enc({ i: item.itemId, o: target }),
       has_more: hasMore,
-      transactions_update_status: "HISTORICAL_UPDATE_COMPLETE",
+      // Like Sandbox: NOT_READY until the initial pull has landed.
+      transactions_update_status: item.released === 0 ? "NOT_READY" : "HISTORICAL_UPDATE_COMPLETE",
     };
   }
 

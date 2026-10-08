@@ -49,9 +49,12 @@ async function syncAll(accessToken: string, cursor: string | null, count = 50) {
       pages.push(page);
       c = page.nextCursor;
     } while (page.hasMore);
-    const total = pages.reduce((n, p) => n + p.added.length, 0);
-    if (cursor !== null || total > 0 || Date.now() > deadline) return { pages, cursor: c! };
-    await new Promise((r) => setTimeout(r, 2_000)); // Sandbox: initial pull still running
+    // A first sync is only complete once Plaid reports the historical pull as
+    // done. Before that, Sandbox can return only the initial (30-day) slice,
+    // which may fit in one page.
+    const ready = pages.at(-1)!.updateStatus === "HISTORICAL_UPDATE_COMPLETE";
+    if (cursor !== null || ready || Date.now() > deadline) return { pages, cursor: c! };
+    await new Promise((r) => setTimeout(r, 2_000));
   }
 }
 
@@ -64,7 +67,9 @@ describe(`Plaid contract (${target})`, () => {
 
   it("paginates /transactions/sync until has_more is false, with exact decimal amounts", async () => {
     const { accessToken } = await connect();
-    const { pages, cursor } = await syncAll(accessToken, null);
+    // Small pages: the default Sandbox Item has exactly 50 transactions, so a
+    // page size of 50 would never paginate.
+    const { pages, cursor } = await syncAll(accessToken, null, 10);
     expect(pages.length).toBeGreaterThan(1);
     expect(pages.at(-1)!.hasMore).toBe(false);
     expect(cursor).toEqual(expect.any(String));
