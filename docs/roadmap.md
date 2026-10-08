@@ -1,5 +1,8 @@
 # Roadmap
 
+Status as of 2026-10-08: blocks 1 to 10 done. Block 11 (contract suite against real
+Sandbox) is implemented but needs Sandbox credentials to run. Block 12 in progress.
+
 Work proceeds strictly top to bottom. If time runs out, items are cut from the
 bottom. An item is never sacrificed for one below it.
 

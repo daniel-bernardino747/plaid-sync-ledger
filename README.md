@@ -26,12 +26,13 @@ on PostgreSQL 17.
 | On `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION`, every fetched page is discarded and the loop restarts from the cursor saved at its start. | [`sync.test.ts`](packages/core/test/sync.test.ts), chaos `mutation-page-2` |
 | Two workers never both commit a sync for the same Item, and a stale worker cannot overwrite newer data or move the cursor back. | [`sync.test.ts`](packages/core/test/sync.test.ts), "fences out a concurrent run" / "a zombie", chaos `two-workers` |
 | A job whose worker died is recovered by its expired lease; a job that keeps failing ends in a visible `dead` state after 5 attempts. | [`queue.test.ts`](packages/core/test/queue.test.ts), "reaper", "retries" |
-| Transient Plaid failures (`500`, timeouts, rate limits) are retried with capped, full-jitter exponential backoff. | [`queue.test.ts`](packages/core/test/queue.test.ts), chaos `plaid-500`, `plaid-timeout` |
+| Transient Plaid failures (`500`, timeouts, rate limits) are retried with capped, full-jitter exponential backoff. | [`queue.test.ts`](packages/core/test/queue.test.ts), [`errors.test.ts`](packages/plaid/test/errors.test.ts), chaos `plaid-500`, `plaid-timeout` |
 | `ITEM_LOGIN_REQUIRED` parks the Item in `needs_reauth` without burning retry attempts; after repair, syncing resumes from the saved cursor. | [`queue.test.ts`](packages/core/test/queue.test.ts), "re-authentication" |
 | Item webhooks cannot change Item state out of order: they only trigger a fresh `/item/get`. | [`queue.test.ts`](packages/core/test/queue.test.ts), [`ingest.test.ts`](apps/webhooks/test/ingest.test.ts) |
 | Access tokens are never stored in plaintext, and a ciphertext copied to another row, column or user fails to decrypt. | [`packages/crypto/test/envelope.test.ts`](packages/crypto/test/envelope.test.ts) |
 | The master key can be rotated while readers keep decrypting, without re-encrypting any token. | [`packages/core/test/rotation.test.ts`](packages/core/test/rotation.test.ts) |
 | A user can only read their own Items, accounts and transactions, enforced by Postgres even for an unfiltered query. | [`packages/db/test/rls.test.ts`](packages/db/test/rls.test.ts) |
+| Sessions cannot be forged or replayed after expiry, and state-changing routes reject cross-origin requests. | [`apps/web/test/session.test.ts`](apps/web/test/session.test.ts) |
 | No access token, public token or marked PII reaches the logs, including on error paths. | [`no-secrets-in-logs.test.ts`](packages/core/test/no-secrets-in-logs.test.ts), every chaos scenario, ESLint `no-console` |
 | Amounts never pass through a floating-point number between Plaid's JSON and `NUMERIC(19,4)`. | [`fake-behaviour.test.ts`](packages/plaid/test/fake-behaviour.test.ts), [`sync.test.ts`](packages/core/test/sync.test.ts) |
 | The ledger produced by a clean run equals the provider's ground truth, and every chaos scenario produces that same ledger. | `pnpm chaos`, table below |
@@ -176,7 +177,9 @@ Requirements: Node 24+, pnpm (via `corepack enable`), Docker.
 pnpm install
 cp .env.example .env              # then fill MASTER_KEYS (pnpm --filter @psl/crypto keygen) and SESSION_SECRET
 cp apps/webhooks/.dev.vars.example apps/webhooks/.dev.vars
-pnpm db:up && pnpm db:migrate
+pnpm db:up && pnpm db:migrate && pnpm --filter @psl/db seed
+
+pnpm dev                          # fake Plaid :4010, webhook Worker :8787, worker, web :3000
 
 pnpm test                         # unit + integration tests against real Postgres and the fake over HTTP
 pnpm chaos                        # all scenarios; or e.g. `pnpm chaos kill-mid-commit`
