@@ -1,0 +1,19 @@
+{
+  "name": "@psl/ops",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "rotate-master-key": "node --env-file-if-exists=../../.env src/rotate-master-key.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@psl/core": "workspace:*",
+    "@psl/crypto": "workspace:*",
+    "@psl/db": "workspace:*",
+    "@psl/log": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1"
+  }
+}

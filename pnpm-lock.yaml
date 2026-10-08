@@ -347,6 +347,25 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  tools/ops:
+    dependencies:
+      '@psl/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@psl/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
+      '@psl/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@psl/log':
+        specifier: workspace:*
+        version: link:../../packages/log
+    devDependencies:
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+
 packages:
 
   '@cloudflare/kv-asset-handler@0.5.0':

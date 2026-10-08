@@ -13,7 +13,8 @@
     "db:up": "docker compose up -d --wait",
     "db:migrate": "pnpm --filter @psl/db migrate:deploy",
     "db:reset": "pnpm --filter @psl/db migrate:reset",
-    "chaos": "pnpm --filter @psl/chaos chaos --"
+    "chaos": "pnpm --filter @psl/chaos chaos --",
+    "rotate-master-key": "pnpm --filter @psl/ops rotate-master-key --"
   },
   "devDependencies": {
     "turbo": "2.11.7",
