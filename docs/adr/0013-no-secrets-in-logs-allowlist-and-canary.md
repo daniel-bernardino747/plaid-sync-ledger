@@ -13,18 +13,23 @@ carrying a Plaid response.
 
 ## Decision
 
-1. **One logger** in `packages/log`. It emits structured JSON and keeps a
-   per-event **allowlist** of fields (for example `job_id`, `item_id`,
-   `attempt`, `error_code`, `duration_ms`). Fields not on the list are dropped,
-   not masked. The allowlist fails closed, while a denylist always misses
-   something.
+1. **One logger** in `packages/log`. It emits structured JSON and keeps an
+   **allowlist** of field names (for example `job_id`, `item_id`, `attempt`,
+   `error_code`, `duration_ms`). Fields not on the list are dropped, not
+   masked, and objects or arrays are never logged even under an allowed name.
+   The allowlist fails closed, while a denylist always misses something. It is
+   global rather than per event: simpler to review, and the canary test covers
+   the remaining risk of an allowed name carrying a sensitive value.
 2. **Errors** are logged only through `serializeError()`, which emits `name`,
    our internal `code`, and Plaid's `error_type` / `error_code`. It never emits
    `message`, `stack`, `cause`, request or response bodies, or query
    parameters.
 3. **ESLint `no-console` is an error** in every app and package except the
    logger itself.
-4. **Canary test.** The Plaid fake issues marked values: access tokens such as
+4. **Canary tests.** A fast one in `pnpm test`
+   (`packages/core/test/no-secrets-in-logs.test.ts`) drives the worker through
+   success, retries, timeouts, a crash inside the commit, a dead job and
+   re-auth, and greps every log line. The full one: The Plaid fake issues marked values: access tokens such as
    `access-sandbox-CANARY-…`, public tokens, account names, and merchant
    names containing `CANARY`. The test captures stdout and stderr of every
    process during a full `pnpm chaos` run (Plaid fake excluded, workers,

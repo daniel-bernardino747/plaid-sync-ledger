@@ -8,7 +8,7 @@
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
+    "lint": "eslint .",
     "test": "turbo run test --concurrency=1",
     "db:up": "docker compose up -d --wait",
     "db:migrate": "pnpm --filter @psl/db migrate:deploy",
@@ -18,6 +18,9 @@
   },
   "devDependencies": {
     "turbo": "2.11.7",
-    "typescript": "6.0.3"
-  }
+    "typescript": "6.0.3",
+    "eslint": "10.12.0",
+    "typescript-eslint": "8.71.1"
+  },
+  "type": "module"
 }
