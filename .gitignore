@@ -1,0 +1,12 @@
+node_modules/
+.turbo/
+dist/
+.next/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+packages/db/src/generated/

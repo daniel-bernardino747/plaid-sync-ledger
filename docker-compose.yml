@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app_owner
+      POSTGRES_PASSWORD: app_owner
+      POSTGRES_DB: psl
+    ports:
+      - "54329:5432"
+    volumes:
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    command: ["postgres", "-c", "max_connections=200", "-c", "log_lock_waits=on"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_owner -d psl"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
