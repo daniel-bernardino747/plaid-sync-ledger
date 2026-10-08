@@ -1,0 +1,23 @@
+diff --git a/packages/core/src/sync.ts b/packages/core/src/sync.ts
+index 935eb99..476251b 100644
+--- a/packages/core/src/sync.ts
++++ b/packages/core/src/sync.ts
+@@ -74,6 +74,9 @@ export async function syncItem(deps: SyncDeps, itemId: string): Promise<SyncResu
+   }
+ 
+   const finalCursor = pages.at(-1)!.nextCursor;
++  // RCA-001 REPRODUCTION (temporary): cursor committed on its own, first.
++  await deps.db.$executeRaw`UPDATE items SET cursor = ${finalCursor} WHERE id = ${item.id}::uuid AND cursor IS NOT DISTINCT FROM ${c0}::text`;
++  const c0After = finalCursor;
+   return deps.db.$transaction(
+     async (tx) => {
+       // Fence (ADR 0004, layer 3). Taking the row lock here also serializes
+@@ -81,7 +84,7 @@ export async function syncItem(deps: SyncDeps, itemId: string): Promise<SyncResu
+       // predicate after the first commits, and matches zero rows.
+       const fenced = await tx.$executeRaw`
+         UPDATE items SET cursor = ${finalCursor}, last_synced_at = now(), updated_at = now()
+-         WHERE id = ${item.id}::uuid AND cursor IS NOT DISTINCT FROM ${c0}::text`;
++         WHERE id = ${item.id}::uuid AND cursor IS NOT DISTINCT FROM ${c0After}::text`;
+       if (fenced !== 1) return { outcome: "cursor_moved", restarts } as const;
+ 
+       const counts = await applyPages(tx, { itemId: item.id, userId: item.userId }, pages, deps.hooks);
