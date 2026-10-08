@@ -200,6 +200,12 @@ introduced, and how each was caught. The running log is in
 
 Requirements: Node 24+, pnpm (via `corepack enable`), Docker.
 
+The same steps run in CI on every push ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+typecheck, lint and tests against a real Postgres, then every chaos scenario,
+with the chaos table published as the job summary and all process logs kept
+as an artifact. A third job runs the contract suite against real Plaid Sandbox
+when the repository has `PLAID_CLIENT_ID` / `PLAID_SECRET` secrets.
+
 ```sh
 pnpm install                      # also generates the Prisma client
 pnpm init:env                     # creates .env with fresh keys (never overwrites)
