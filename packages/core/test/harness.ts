@@ -3,7 +3,7 @@ import { Keyring, newMasterKey } from "@psl/crypto";
 import { createDb, type Db } from "@psl/db";
 import { createTestDatabase, truncateAll, type TestDbUrls } from "@psl/db/testing";
 import { setLogSink } from "@psl/log";
-import { PlaidHttpClient } from "@psl/plaid";
+import { PlaidHttpClient, type PlaidGateway } from "@psl/plaid";
 import { FakePlaid } from "@psl/plaid-fake";
 import { connectItem } from "../src/connect.ts";
 import { processOne, type WorkerConfig } from "../src/worker.ts";
@@ -154,4 +154,25 @@ export function expectedLedger(fake: FakePlaid, plaidItemId: string): LedgerRow[
       pending_transaction_id: t.pending_transaction_id,
     }))
     .sort((a, b) => (a.transaction_id < b.transaction_id ? -1 : a.transaction_id > b.transaction_id ? 1 : 0));
+}
+
+/**
+ * Wraps a gateway so tests can observe /transactions/sync calls. Delegates
+ * explicitly: the HTTP client uses private fields, so prototype tricks break.
+ */
+export function recordingGateway(
+  base: PlaidHttpClient,
+  onSync: (input: { cursor: string | null }, page: Awaited<ReturnType<PlaidHttpClient["syncTransactions"]>>) => void,
+): PlaidGateway {
+  return {
+    exchangePublicToken: (t) => base.exchangePublicToken(t),
+    getItem: (t) => base.getItem(t),
+    getWebhookVerificationKey: (k) => base.getWebhookVerificationKey(k),
+    createLinkToken: (i) => base.createLinkToken(i),
+    syncTransactions: async (input) => {
+      const page = await base.syncTransactions(input);
+      onSync(input, page);
+      return page;
+    },
+  };
 }

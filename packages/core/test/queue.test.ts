@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { backoffMs, claimJob, enqueue, enqueueStaleItems, parkForReauth, reapExpired } from "../src/queue.ts";
 import { processOne } from "../src/worker.ts";
-import { createHarness, expectedLedger, type Harness } from "./harness.ts";
+import { createHarness, expectedLedger, recordingGateway, type Harness } from "./harness.ts";
 
 // Queue guarantees (ADR 0001, ADR 0004, ADR 0005).
 
@@ -109,19 +109,28 @@ describe("retries (ADR 0004)", () => {
 });
 
 describe("re-authentication (ADR 0005)", () => {
-  it("parks the item on ITEM_LOGIN_REQUIRED without burning attempts, then resumes from the saved cursor", async () => {
-    const { itemId, plaidItemId } = await h.connect();
-    await h.drain();
-    const { rows: before } = await h.owner.query(`SELECT cursor FROM items WHERE id = $1`, [itemId]);
+  const statusOf = async (itemId: string) =>
+    (await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId])).rows[0].status as string;
 
-    const token = await accessTokenOf(itemId);
-    await h.plaid.resetLogin(token);
+  it("parks the item on ITEM_LOGIN_REQUIRED without burning attempts, then resumes from the saved cursor", async () => {
+    // Record every /transactions/sync call the worker makes.
+    const calls: { cursor: string | null; added: number }[] = [];
+    const recording = recordingGateway(h.plaid, (input, page) => calls.push({ cursor: input.cursor, added: page.added.length }));
+    const worker = h.worker({ plaid: recording });
+
+    const { itemId, plaidItemId } = await h.connect();
+    await h.drain(worker);
+    const { rows: before } = await h.owner.query(`SELECT cursor FROM items WHERE id = $1`, [itemId]);
+    const savedCursor = before[0].cursor as string;
+    expect(savedCursor).toBeTruthy();
+
+    await h.plaid.resetLogin(await accessTokenOf(itemId));
     h.fake.advance();
     await enqueue(h.system, itemId, "transactions_sync");
-    await h.drain();
+    await h.drain(worker);
 
     const { rows: parked } = await h.owner.query(`SELECT status::text, cursor FROM items WHERE id = $1`, [itemId]);
-    expect(parked[0]).toEqual({ status: "needs_reauth", cursor: before[0].cursor });
+    expect(parked[0]).toEqual({ status: "needs_reauth", cursor: savedCursor });
     const queued = (await h.jobs()).filter((j) => j.status === "queued");
     expect(queued).toMatchObject([{ kind: "transactions_sync", attempts: 0, last_error_code: "ITEM_LOGIN_REQUIRED" }]);
     expect(await claimJob(h.system, "w", 30)).toBeNull(); // stops syncing
@@ -129,23 +138,60 @@ describe("re-authentication (ADR 0005)", () => {
     // User completes Link update mode; the server enqueues a status refresh.
     h.fake.repair(plaidItemId);
     await enqueue(h.system, itemId, "refresh_item_status");
-    await h.drain();
+    const callsBeforeResume = calls.length;
+    await h.drain(worker);
 
-    const { rows: after } = await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId]);
-    expect(after[0].status).toBe("active");
+    expect(await statusOf(itemId)).toBe("active");
+    // Resumed from the cursor saved before re-auth, not from scratch...
+    const resumed = calls.slice(callsBeforeResume);
+    expect(resumed.length).toBeGreaterThan(0);
+    expect(resumed[0]!.cursor).toBe(savedCursor);
+    // ...so only the new batch was fetched, not the 120-transaction history.
+    expect(resumed.reduce((n, c) => n + c.added, 0)).toBeLessThan(40);
     expect(await h.liveLedger(itemId)).toEqual(expectedLedger(h.fake, plaidItemId));
   });
 
-  it("ignores webhook order: a stale ERROR after repair does not park a healthy item", async () => {
+  it("a late ERROR webhook, after the item was repaired, does not park it again", async () => {
     const { itemId, plaidItemId } = await h.connect();
     await h.drain();
-    // The ERROR webhook arrives late, after the item was already repaired.
-    // It only enqueues a refresh, and /item/get says the item is healthy.
+    await h.plaid.resetLogin(await accessTokenOf(itemId)); // Plaid sends ERROR (delivery delayed)
+    await enqueue(h.system, itemId, "transactions_sync");
+    await h.drain();
+    expect(await statusOf(itemId)).toBe("needs_reauth");
+
+    h.fake.repair(plaidItemId); // Plaid sends LOGIN_REPAIRED, delivered promptly
     await enqueue(h.system, itemId, "refresh_item_status");
     await h.drain();
-    const { rows } = await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId]);
-    expect(rows[0].status).toBe("active");
-    expect(plaidItemId).toBeTruthy();
+    expect(await statusOf(itemId)).toBe("active");
+
+    // The delayed ERROR finally arrives. Webhooks only enqueue a refresh
+    // (see apps/webhooks ingest tests), and /item/get says healthy. Run just
+    // that job: a full drain could hide a wrong intermediate state.
+    await enqueue(h.system, itemId, "refresh_item_status");
+    expect(await processOne(h.worker())).toBe(true);
+    expect(await statusOf(itemId)).toBe("active");
+  });
+
+  it("a late LOGIN_REPAIRED webhook, after the item broke again, does not mark it healthy", async () => {
+    const { itemId, plaidItemId } = await h.connect();
+    await h.drain();
+    await h.plaid.resetLogin(await accessTokenOf(itemId));
+    await enqueue(h.system, itemId, "transactions_sync");
+    await h.drain();
+    h.fake.repair(plaidItemId); // LOGIN_REPAIRED sent, but its delivery is delayed
+    await enqueue(h.system, itemId, "refresh_item_status");
+    await h.drain();
+    await h.plaid.resetLogin(await accessTokenOf(itemId)); // the login breaks again
+    await enqueue(h.system, itemId, "transactions_sync");
+    await h.drain();
+    expect(await statusOf(itemId)).toBe("needs_reauth");
+
+    // The stale LOGIN_REPAIRED arrives now. Run only the refresh it causes:
+    // after a full drain, a later sync would re-park the Item and hide a
+    // refresh that wrongly marked it healthy.
+    await enqueue(h.system, itemId, "refresh_item_status");
+    expect(await processOne(h.worker())).toBe(true);
+    expect(await statusOf(itemId)).toBe("needs_reauth");
   });
 });
 

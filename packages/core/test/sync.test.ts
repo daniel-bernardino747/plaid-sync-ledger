@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { syncItem } from "../src/sync.ts";
 import { enqueue } from "../src/queue.ts";
-import { createHarness, expectedLedger, type Harness } from "./harness.ts";
+import { createHarness, expectedLedger, recordingGateway, type Harness } from "./harness.ts";
 
 // Sync engine guarantees (ADR 0003, ADR 0004), against real Postgres and the
 // fake over HTTP. The oracle is the fake's own ground truth, not a hash.
@@ -148,12 +148,7 @@ describe("sync by cursor", () => {
     h.fake.advance(); // batch 1 adds pending transactions; batch 3 settles them (pending removed)
 
     const zombieAdded: string[] = [];
-    const recording: typeof h.plaid = Object.create(h.plaid);
-    recording.syncTransactions = async (input) => {
-      const page = await h.plaid.syncTransactions(input);
-      zombieAdded.push(...page.added.map((t) => t.transactionId));
-      return page;
-    };
+    const recording = recordingGateway(h.plaid, (_input, page) => zombieAdded.push(...page.added.map((t) => t.transactionId)));
 
     let once = true;
     const zombie = await syncItem(
