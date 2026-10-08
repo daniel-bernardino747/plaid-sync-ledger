@@ -29,11 +29,12 @@ carrying a Plaid response.
 4. **Canary tests.** A fast one in `pnpm test`
    (`packages/core/test/no-secrets-in-logs.test.ts`) drives the worker through
    success, retries, timeouts, a crash inside the commit, a dead job and
-   re-auth, and greps every log line. The full one: The Plaid fake issues marked values: access tokens such as
-   `access-sandbox-CANARY-…`, public tokens, account names, and merchant
-   names containing `CANARY`. The test captures stdout and stderr of every
-   process during a full `pnpm chaos` run (Plaid fake excluded, workers,
-   `wrangler dev`, web), with kills, `500`s, timeouts, and retries, and fails
+   re-auth, and greps every log line. The full one runs inside every
+   `pnpm chaos` scenario. The Plaid fake issues marked values (access tokens
+   such as `access-sandbox-CANARY-…`, public tokens, and a merchant name
+   containing `CANARY`). The harness captures stdout and stderr of every
+   process it starts (workers and `wrangler dev`; the fake itself is
+   excluded), with kills, `500`s, timeouts, and retries, and fails the scenario
    if any canary value appears. This covers exactly the error paths where
    leaks happen.
 
