@@ -26,21 +26,24 @@ const keyring = await Keyring.fromEnv({
 const plaid = new PlaidHttpClient({ ...plaidConfigFromEnv(process.env), timeoutMs: num("PLAID_TIMEOUT_MS", 10_000) });
 
 /**
- * Chaos failpoint (ADR 0010): after N transaction upserts inside the commit
- * transaction, die with SIGKILL. Nothing runs after this: no finally blocks,
- * no rollback from our side, no exit handlers. Postgres rolls the transaction
- * back when the connection drops.
+ * Chaos failpoints (ADR 0010). The process dies with SIGKILL: nothing runs
+ * after it (no finally blocks, no rollback from our side, no exit handlers).
+ *   FAIL_AFTER_N_UPSERTS: inside the commit transaction; Postgres rolls it back
+ *                         when the connection drops.
+ *   FAIL_AFTER_N_PAGES:   during pagination, with pages held only in memory.
  */
-const failAfter = Number(process.env.FAIL_AFTER_N_UPSERTS ?? 0);
-const afterUpsert =
-  failAfter > 0
-    ? (n: number) => {
-        if (n >= failAfter) {
-          log.warn("chaos.failpoint_kill", { count: n, worker_id: workerId });
-          process.kill(process.pid, "SIGKILL");
-        }
-      }
-    : undefined;
+function failpoint(name: string): ((n: number) => void) | undefined {
+  const limit = Number(process.env[name] ?? 0);
+  if (limit <= 0) return undefined;
+  return (n) => {
+    if (n >= limit) {
+      log.warn("chaos.failpoint_kill", { count: n, reason: name, worker_id: workerId });
+      process.kill(process.pid, "SIGKILL");
+    }
+  };
+}
+const afterUpsert = failpoint("FAIL_AFTER_N_UPSERTS");
+const afterPage = failpoint("FAIL_AFTER_N_PAGES");
 
 const controller = new AbortController();
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
@@ -67,7 +70,7 @@ try {
       pollMs: num("POLL_MS", workerDefaults.pollMs),
       safetyNetEveryMs: num("SAFETY_NET_EVERY_MS", workerDefaults.safetyNetEveryMs),
       staleAfterSeconds: num("STALE_AFTER_SECONDS", workerDefaults.staleAfterSeconds),
-      ...(afterUpsert ? { hooks: { afterUpsert } } : {}),
+      hooks: { ...(afterUpsert ? { afterUpsert } : {}), ...(afterPage ? { afterPage } : {}) },
     },
     controller.signal,
   );

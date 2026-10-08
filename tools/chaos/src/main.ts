@@ -37,8 +37,10 @@ interface Scenario {
   fault: string;
   workers: number;
   chaos?: Record<string, unknown>;
-  /** SIGKILL the worker mid-commit this many times before letting it finish. */
+  /** SIGKILL the worker this many times (via `killEnv`) before letting it finish. */
   kills?: number;
+  /** Failpoint env for the killed workers. */
+  killEnv?: Record<string, string>;
   /**
    * Evidence that the fault really happened, read from the scenario's process
    * output. A green row where nothing was injected proves nothing.
@@ -50,10 +52,19 @@ interface Scenario {
 const SCENARIOS: Scenario[] = [
   { name: "clean", fault: "none (baseline)", workers: 1 },
   {
-    name: "kill-mid-commit",
-    fault: "SIGKILL after 60 upserts inside the commit, 3 times, restart",
+    name: "kill-mid-pagination",
+    fault: "SIGKILL after fetching page 2, before anything is written, 3 times, restart",
     workers: 1,
     kills: 3,
+    killEnv: { FAIL_AFTER_N_PAGES: "2" },
+    evidence: { what: "kills during pagination", pattern: /"event":"chaos\.failpoint_kill".*"reason":"FAIL_AFTER_N_PAGES"/, min: 3 },
+  },
+  {
+    name: "kill-mid-commit",
+    fault: "SIGKILL after 60 upserts inside the commit (FAIL_AFTER_N_UPSERTS), 3 times, restart",
+    workers: 1,
+    kills: 3,
+    killEnv: { FAIL_AFTER_N_UPSERTS: "60" },
     evidence: { what: "orphaned jobs reaped", pattern: /"event":"queue\.reaped"/, min: 1 },
   },
   {
@@ -218,7 +229,7 @@ async function runScenario(s: Scenario): Promise<Result> {
         BACKOFF_BASE_MS: "50",
         BACKOFF_MAX_MS: "1000",
         POLL_MS: "100",
-        ...(killNow ? { FAIL_AFTER_N_UPSERTS: "60" } : {}),
+        ...(killNow ? s.killEnv : {}),
         ...s.workerEnv,
       };
       const p = startProc(`worker${i}`, process.execPath, ["src/main.ts"], { cwd: `${ROOT}apps/worker`, env, log });

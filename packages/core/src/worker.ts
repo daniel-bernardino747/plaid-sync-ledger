@@ -30,7 +30,8 @@ export interface WorkerConfig {
   /** Safety-net cadence and staleness threshold (roadmap, block 3). */
   safetyNetEveryMs: number;
   staleAfterSeconds: number;
-  hooks?: Pick<SyncHooks, "afterUpsert">;
+  /** Chaos failpoints (ADR 0010): after N upserts inside the commit, after N fetched pages. */
+  hooks?: Pick<SyncHooks, "afterUpsert"> & { afterPage?: (pages: number) => void | Promise<void> };
   rand?: () => number;
 }
 
@@ -58,6 +59,7 @@ export async function processOne(cfg: WorkerConfig): Promise<boolean> {
       return true;
     }
 
+    let pagesFetched = 0;
     const r = await syncItem(
       {
         db: cfg.db,
@@ -65,8 +67,11 @@ export async function processOne(cfg: WorkerConfig): Promise<boolean> {
         keyring: cfg.keyring,
         pageSize: cfg.pageSize,
         hooks: {
-          ...cfg.hooks,
-          onPage: () => heartbeat(cfg.db, job, cfg.workerId, cfg.leaseSeconds),
+          ...(cfg.hooks?.afterUpsert ? { afterUpsert: cfg.hooks.afterUpsert } : {}),
+          onPage: async () => {
+            await cfg.hooks?.afterPage?.(++pagesFetched);
+            return heartbeat(cfg.db, job, cfg.workerId, cfg.leaseSeconds);
+          },
         },
       },
       job.itemId,

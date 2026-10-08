@@ -26,7 +26,11 @@ every scenario are emitted by the fake, signed with ES256, and delivered to
 the real Worker over HTTP, so verification and ingestion (ADR 0002) are on the
 tested path.
 
-**Kill.** With `FAIL_AFTER_N_UPSERTS=N`, the worker calls
+**Kill.** The spec asks to kill the worker "in the middle of a page". A sync
+run has two places where that can happen, and both are covered:
+`FAIL_AFTER_N_PAGES=N` kills it after N pages were fetched (nothing written
+yet), and `FAIL_AFTER_N_UPSERTS=N` kills it inside the commit. With
+`FAIL_AFTER_N_UPSERTS=N`, the worker calls
 `process.kill(process.pid, 'SIGKILL')` after N upserts, inside the open commit
 transaction. No `finally`, no explicit rollback, and no exit handler runs.
 Postgres rolls back when the connection drops. The orchestrator observes the
@@ -38,7 +42,8 @@ reaper (ADR 0004) recovers the orphaned job within seconds during chaos runs.
 | Scenario | Fault |
 | --- | --- |
 | `clean` | none (baseline) |
-| `kill-mid-commit` | `FAIL_AFTER_N_UPSERTS`, then restart |
+| `kill-mid-pagination` | `FAIL_AFTER_N_PAGES`: SIGKILL after page 2 is fetched, pages only in memory, then restart |
+| `kill-mid-commit` | `FAIL_AFTER_N_UPSERTS`: SIGKILL inside the commit transaction, then restart |
 | `webhook-x10` | every webhook delivered 10 times |
 | `two-workers` | two workers consume the queue concurrently |
 | `mutation-page-2` | `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` on page 2 |

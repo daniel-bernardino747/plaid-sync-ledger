@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { syncItem } from "../src/sync.ts";
+import { processOne } from "../src/worker.ts";
 import { enqueue } from "../src/queue.ts";
 import { createHarness, expectedLedger, recordingGateway, type Harness } from "./harness.ts";
 
@@ -179,6 +180,34 @@ describe("sync by cursor", () => {
       [resurrectable],
     );
     expect(rows).toEqual([]);
+    expect(await h.liveLedger(itemId)).toEqual(expectedLedger(h.fake, plaidItemId));
+  });
+
+  it("a crash between page fetches loses only memory: nothing is written and the retry restarts from the saved cursor", async () => {
+    const { itemId, plaidItemId } = await h.connect();
+    const crash = new Error("killed after page 2");
+    const cursors: (string | null)[] = [];
+    const recording = recordingGateway(h.plaid, (input) => cursors.push(input.cursor));
+    await processOne(
+      h.worker({
+        plaid: recording,
+        hooks: {
+          afterPage: (n) => {
+            if (n === 2) throw crash;
+          },
+        },
+      }),
+    );
+    const { rows } = await h.owner.query(
+      `SELECT (SELECT cursor FROM items WHERE id = $1) AS cursor, (SELECT count(*)::int FROM transactions) AS n`,
+      [itemId],
+    );
+    expect(rows[0]).toEqual({ cursor: null, n: 0 });
+    expect(cursors.length).toBe(2);
+
+    cursors.length = 0;
+    await h.drain(h.worker({ plaid: recording }));
+    expect(cursors[0]).toBeNull(); // restarted from the saved (initial) cursor, not from page 3
     expect(await h.liveLedger(itemId)).toEqual(expectedLedger(h.fake, plaidItemId));
   });
 
