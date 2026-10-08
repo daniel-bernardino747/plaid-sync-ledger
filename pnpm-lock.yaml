@@ -173,6 +173,37 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  packages/core:
+    dependencies:
+      '@psl/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@psl/db':
+        specifier: workspace:*
+        version: link:../db
+      '@psl/log':
+        specifier: workspace:*
+        version: link:../log
+      '@psl/plaid':
+        specifier: workspace:*
+        version: link:../plaid
+    devDependencies:
+      '@psl/plaid-fake':
+        specifier: workspace:*
+        version: link:../plaid-fake
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.10.1)(vite@8.3.3(@types/node@24.10.1)(jiti@2.7.0))
+
   packages/crypto:
     devDependencies:
       '@types/node':
