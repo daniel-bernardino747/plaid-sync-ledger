@@ -19,7 +19,10 @@ const num = (name: string, fallback: number) => Number(process.env[name] ?? fall
 
 const workerId = process.env.WORKER_ID ?? `${hostname()}:${process.pid}`;
 const db = createDb(env("DATABASE_URL_SYSTEM"));
-const keyring = await Keyring.fromEnv(process.env);
+const keyring = await Keyring.fromEnv({
+  MASTER_KEYS: process.env.MASTER_KEYS,
+  MASTER_KEY_CURRENT: process.env.MASTER_KEY_CURRENT,
+});
 const plaid = new PlaidHttpClient({
   baseUrl: env("PLAID_BASE_URL"),
   clientId: env("PLAID_CLIENT_ID", "fake-client-id"),
