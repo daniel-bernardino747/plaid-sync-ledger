@@ -45,5 +45,6 @@ stay auditable and a late upsert cannot silently resurrect a row.
   thousands of transactions, which is fine for this demo. In production the
   fix would be a staging table keyed by `sync_run_id`, merged in one
   transaction at the end.
-- The ledger hash used by the chaos suite covers live rows and removal state,
-  so the soft delete is part of what is compared.
+- The ledger hash used by the chaos suite covers live rows only (ADR 0009, as
+  amended). A soft-deleted row that should have been removed but was not still
+  shows up as a live row, so missed removals are caught.

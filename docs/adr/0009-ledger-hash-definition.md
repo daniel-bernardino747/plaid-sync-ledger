@@ -23,18 +23,22 @@ amounts).
 
 ```
 [transaction_id, account_id, amount (text, e.g. "12.3400"), iso_currency_code,
- date, authorized_date, name, merchant_name, pending, pending_transaction_id,
- removed]
+ date, authorized_date, name, merchant_name, pending, pending_transaction_id]
 ```
 
-`removed` is `removed_at IS NOT NULL`. JSON encoding makes the line
+Only live rows (`removed_at IS NULL`) are part of the ledger. JSON encoding makes the line
 unambiguous: a `|` or newline inside `name` cannot shift fields, and `null`
 stays distinct from `""`.
 
 > Amended during implementation. The first version of this ADR joined fields
 > with `|` and rendered NULL as `∅`. That encoding is ambiguous: a merchant
 > name containing `|` (or a literal `∅`) can make two different rows produce
-> the same line. See "Where the AI got it wrong" in the README.
+> the same line. It also included soft-deleted rows, which made the hash
+> depend on sync timing: a transaction added and removed between two syncs
+> leaves a removed row only if a sync ran in between, so coalesced webhooks
+> (ADR 0001) would change the hash of a correct ledger. A removal that is not
+> applied is still caught, as a live row that should not exist. See "Where the
+> AI got it wrong" in the README.
 
 **Excluded on purpose.**
 
