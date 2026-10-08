@@ -9,7 +9,8 @@ Command: `pnpm --filter @psl/plaid test:contract:sandbox` (needs
 
 ## Result (2026-10-08)
 
-6 of 6 tests passed, on 6 consecutive runs after the fixes below:
+6 of 6 tests passed on each of 3 consecutive runs after the last fix below.
+Before that fix, 4 of 5 runs passed and 1 failed intermittently.
 
 | Test | What it checks against real Plaid |
 | --- | --- |
