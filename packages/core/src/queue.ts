@@ -1,4 +1,4 @@
-import type { Db, JobKind } from "@psl/db";
+import { sqlState, type Db, type JobKind } from "@psl/db";
 
 /**
  * The job queue is a Postgres table (ADR 0001, ADR 0004). No broker.
@@ -31,18 +31,7 @@ export function backoffMs(attempt: number, p: RetryPolicy, rand: () => number = 
 }
 
 const UNIQUE_VIOLATION = "23505";
-
-function isUniqueViolation(e: unknown): boolean {
-  // Prisma wraps driver errors; the SQLSTATE survives in different places
-  // depending on the path, so check the ones the pg adapter uses.
-  const o = e as { code?: string; meta?: { code?: string; driverAdapterError?: { cause?: { originalCode?: string } } } };
-  return (
-    o?.code === "P2002" ||
-    o?.meta?.code === UNIQUE_VIOLATION ||
-    o?.meta?.driverAdapterError?.cause?.originalCode === UNIQUE_VIOLATION ||
-    /23505|unique constraint/i.test(String((e as Error)?.message ?? ""))
-  );
-}
+const isUniqueViolation = (e: unknown) => sqlState(e) === UNIQUE_VIOLATION;
 
 /** Enqueue with coalescing: a no-op if a queued job for (item, kind) exists. */
 export async function enqueue(db: Db, itemId: string, kind: JobKind): Promise<boolean> {
@@ -119,28 +108,75 @@ export async function finishJob(
  * Puts a running job back in the queue. If another job for the same Item and
  * kind is already queued, that job covers the work and this one becomes
  * `superseded` (the coalescing index would reject a second queued row).
- *
- * `consumeAttempt: false` is used when the failure is not the job's fault,
- * e.g. the Item needs re-authentication (ADR 0005).
  */
 export async function requeueJob(
   db: Db,
   job: ClaimedJob,
   workerId: string,
-  opts: { delayMs: number; consumeAttempt: boolean; errorCode: string | null },
+  opts: { delayMs: number; errorCode: string | null },
 ): Promise<"queued" | "superseded" | "lost"> {
   try {
     const n = await db.$executeRaw`
       UPDATE sync_jobs
          SET status = 'queued', lease_until = NULL, locked_by = NULL,
              run_at = now() + make_interval(secs => ${opts.delayMs / 1000}),
-             attempts = attempts - ${opts.consumeAttempt ? 0 : 1},
              last_error_code = ${opts.errorCode}, updated_at = now()
        WHERE id = ${job.id} AND status = 'running' AND locked_by = ${workerId}`;
     return n === 1 ? "queued" : "lost";
   } catch (e) {
     if (!isUniqueViolation(e)) throw e;
     return (await finishJob(db, job, workerId, "superseded", opts.errorCode)) ? "superseded" : "lost";
+  }
+}
+
+/**
+ * ITEM_LOGIN_REQUIRED from Plaid (ADR 0005): in ONE transaction, park the Item
+ * in needs_reauth and give the job back to the queue without consuming the
+ * attempt (it was not the job's fault). If another job for the Item is already
+ * queued, this one becomes `superseded` instead.
+ *
+ * A webhook can insert a queued job between our existence check and our
+ * update; the coalescing index then rejects the update (23505). Re-running the
+ * whole transaction once sees that job and takes the superseded branch.
+ *
+ * `afterItemUpdate` is a test seam: it runs between the two writes on the
+ * first attempt only.
+ */
+export async function parkForReauth(
+  db: Db,
+  job: ClaimedJob,
+  workerId: string,
+  opts: { errorCode?: string; afterItemUpdate?: () => Promise<void> } = {},
+): Promise<"queued" | "superseded" | "lost"> {
+  const errorCode = opts.errorCode ?? "ITEM_LOGIN_REQUIRED";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await db.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE items SET status = 'needs_reauth', updated_at = now()
+           WHERE id = ${job.itemId}::uuid AND status = 'active'`;
+        if (attempt === 0) await opts.afterItemUpdate?.();
+        const rows = await tx.$queryRaw<{ status: "queued" | "superseded" }[]>`
+          WITH decision AS (
+            SELECT EXISTS (
+              SELECT 1 FROM sync_jobs q
+               WHERE q.item_id = ${job.itemId}::uuid AND q.kind = ${job.kind}::job_kind AND q.status = 'queued'
+            ) AS covered)
+          UPDATE sync_jobs j
+             SET status = CASE WHEN d.covered THEN 'superseded'::job_status ELSE 'queued'::job_status END,
+                 finished_at = CASE WHEN d.covered THEN now() END,
+                 locked_by = CASE WHEN d.covered THEN j.locked_by END,
+                 attempts = j.attempts - 1,
+                 lease_until = NULL, run_at = now(), last_error_code = ${errorCode}, updated_at = now()
+            FROM decision d
+           WHERE j.id = ${job.id} AND j.status = 'running' AND j.locked_by = ${workerId}
+          RETURNING j.status::text AS status`;
+        return rows[0]?.status ?? "lost";
+      });
+    } catch (e) {
+      if (attempt === 0 && isUniqueViolation(e)) continue;
+      throw e;
+    }
   }
 }
 

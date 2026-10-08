@@ -9,12 +9,13 @@ import {
   enqueueStaleItems,
   finishJob,
   heartbeat,
+  parkForReauth,
   reapExpired,
   requeueJob,
   type ClaimedJob,
   type RetryPolicy,
 } from "./queue.ts";
-import { markNeedsReauth, refreshItemStatus } from "./refresh.ts";
+import { refreshItemStatus } from "./refresh.ts";
 import { LeaseLostError, syncItem, type SyncHooks } from "./sync.ts";
 
 export interface WorkerConfig {
@@ -104,8 +105,7 @@ async function handleFailure(cfg: WorkerConfig, job: ClaimedJob, e: unknown, bas
   if (e instanceof PlaidCallError && e.kind === "item_login_required") {
     // First-hand signal (ADR 0005): stop syncing, do not burn an attempt. The
     // claim query skips non-active Items, so the requeued job waits for repair.
-    await markNeedsReauth(cfg.db, job.itemId);
-    const r = await requeueJob(cfg.db, job, cfg.workerId, { delayMs: 0, consumeAttempt: false, errorCode: "ITEM_LOGIN_REQUIRED" });
+    const r = await parkForReauth(cfg.db, job, cfg.workerId, { errorCode: e.errorCode ?? "ITEM_LOGIN_REQUIRED" });
     log.warn("job.item_needs_reauth", { ...base, outcome: r });
     return;
   }
@@ -119,7 +119,7 @@ async function handleFailure(cfg: WorkerConfig, job: ClaimedJob, e: unknown, bas
     return;
   }
   const delayMs = backoffMs(job.attempts, cfg.retry, cfg.rand);
-  const r = await requeueJob(cfg.db, job, cfg.workerId, { delayMs, consumeAttempt: true, errorCode });
+  const r = await requeueJob(cfg.db, job, cfg.workerId, { delayMs, errorCode });
   log.warn("job.retry_scheduled", { ...base, delay_ms: delayMs, outcome: r, ...serializeError(e) });
 }
 

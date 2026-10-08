@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { backoffMs, claimJob, enqueue, enqueueStaleItems, reapExpired } from "../src/queue.ts";
+import { backoffMs, claimJob, enqueue, enqueueStaleItems, parkForReauth, reapExpired } from "../src/queue.ts";
 import { processOne } from "../src/worker.ts";
 import { createHarness, expectedLedger, type Harness } from "./harness.ts";
 
@@ -146,6 +146,44 @@ describe("re-authentication (ADR 0005)", () => {
     const { rows } = await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId]);
     expect(rows[0].status).toBe("active");
     expect(plaidItemId).toBeTruthy();
+  });
+});
+
+describe("parking for re-auth is atomic (ADR 0005)", () => {
+  async function state(itemId: string) {
+    const { rows } = await h.owner.query(`SELECT status::text FROM items WHERE id = $1`, [itemId]);
+    return { item: rows[0].status as string, jobs: await h.jobs() };
+  }
+
+  it("applies nothing if it dies halfway: the item stays active and the job stays running", async () => {
+    const { itemId } = await h.connect();
+    const job = (await claimJob(h.system, "w", 30))!;
+    const crash = new Error("crash between the two writes");
+    await expect(
+      parkForReauth(h.system, job, "w", { afterItemUpdate: () => Promise.reject(crash) }),
+    ).rejects.toBe(crash);
+    expect(await state(itemId)).toMatchObject({ item: "active", jobs: [{ status: "running", attempts: 1 }] });
+  });
+
+  it("parks the item and requeues the job without consuming the attempt", async () => {
+    const { itemId } = await h.connect();
+    const job = (await claimJob(h.system, "w", 30))!;
+    expect(await parkForReauth(h.system, job, "w")).toBe("queued");
+    expect(await state(itemId)).toMatchObject({
+      item: "needs_reauth",
+      jobs: [{ status: "queued", attempts: 0, last_error_code: "ITEM_LOGIN_REQUIRED" }],
+    });
+  });
+
+  it("marks the job superseded when a webhook enqueued another one meanwhile", async () => {
+    const { itemId } = await h.connect();
+    const job = (await claimJob(h.system, "w", 30))!;
+    const r = await parkForReauth(h.system, job, "w", {
+      // A webhook lands while the park transaction is open.
+      afterItemUpdate: async () => void (await h.owner.query(`INSERT INTO sync_jobs (item_id, kind) VALUES ($1, 'transactions_sync')`, [itemId])),
+    });
+    expect(r).toBe("superseded");
+    expect(await state(itemId)).toMatchObject({ item: "needs_reauth", jobs: [{ status: "superseded" }, { status: "queued" }] });
   });
 });
 

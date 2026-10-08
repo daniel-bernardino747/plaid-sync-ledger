@@ -45,8 +45,3 @@ export async function refreshItemStatus(
       return { outcome: "unchanged", resumed: false };
   }
 }
-
-/** Synchronous ITEM_LOGIN_REQUIRED from an API call is first-hand: apply directly. */
-export async function markNeedsReauth(db: Db, itemId: string): Promise<void> {
-  await db.item.updateMany({ where: { id: itemId, status: "active" }, data: { status: "needs_reauth" } });
-}
