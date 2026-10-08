@@ -115,9 +115,7 @@ export function ItemActions({ itemId, status, linkAvailable }: { itemId: string;
             Reconnect
           </button>
         ) : (
-          <button className="primary" disabled={busy} onClick={() => run(() => post(`/api/items/${itemId}/fake-repair`))}>
-            Reconnect (fake)
-          </button>
+          <span className="muted">Reconnecting runs Plaid Link in update mode: set PLAID_TARGET=sandbox.</span>
         )}
         {linkToken && (
           <LinkLauncher

@@ -6,8 +6,9 @@ import { HttpError } from "../../../../../lib/session.ts";
 /**
  * Spec, item 4: "Testar provocando o erro com /sandbox/item/reset_login".
  * Forces ITEM_LOGIN_REQUIRED. Only fake and Sandbox targets exist, so this
- * endpoint cannot reach a production Item. Plaid also fires the ITEM ERROR webhook; a sync is enqueued too so
- * the failure is observed even without a reachable webhook URL.
+ * endpoint cannot reach a production Item. Plaid also fires the ITEM ERROR
+ * webhook; a sync is enqueued too, so the failure is observed even without a
+ * reachable webhook URL.
  */
 export const POST = async (request: Request, ctx: RouteContext<"/api/items/[id]/sandbox-reset-login">) =>
   mutation("items.sandbox_reset_login", async () => {
