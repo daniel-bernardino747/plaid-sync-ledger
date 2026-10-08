@@ -70,3 +70,18 @@ export function classifyPlaidError(
   if (httpStatus >= 500) return new PlaidCallError("transient", info);
   return new PlaidCallError("fatal", info);
 }
+
+export type ItemHealth = "healthy" | "needs_reauth" | "revoked" | "unchanged";
+
+/**
+ * What an Item's current `item.error` (from /item/get) means for syncing
+ * (ADR 0005). Deliberately narrow: only the codes the ADR names change state.
+ * Anything else, including warnings such as a pending consent expiration,
+ * leaves the Item as it is and syncing continues.
+ */
+export function classifyItemHealth(errorCode: string | null): ItemHealth {
+  if (errorCode === null) return "healthy";
+  if (errorCode === "ITEM_LOGIN_REQUIRED") return "needs_reauth";
+  if (errorCode === "USER_PERMISSION_REVOKED") return "revoked";
+  return "unchanged";
+}

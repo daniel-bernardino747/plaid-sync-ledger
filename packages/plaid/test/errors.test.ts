@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPlaidError } from "../src/errors.ts";
+import { classifyItemHealth, classifyPlaidError } from "../src/errors.ts";
 
 // The single mapping from Plaid errors to retry decisions (ADR 0008).
 
@@ -24,5 +24,20 @@ describe("classifyPlaidError", () => {
   it("branches on error_code over HTTP status, as Plaid's docs recommend", () => {
     // A Plaid API_ERROR is transient even if it came with a 4xx status.
     expect(classifyPlaidError(400, { error_type: "API_ERROR", error_code: "INTERNAL_SERVER_ERROR" }).kind).toBe("transient");
+  });
+});
+
+describe("classifyItemHealth (ADR 0005)", () => {
+  it.each([
+    [null, "healthy"],
+    ["ITEM_LOGIN_REQUIRED", "needs_reauth"],
+    ["USER_PERMISSION_REVOKED", "revoked"],
+    // A pending expiration is a warning: the Item still works, syncing continues.
+    ["PENDING_EXPIRATION", "unchanged"],
+    ["PENDING_DISCONNECT", "unchanged"],
+    ["INSTITUTION_DOWN", "unchanged"],
+    ["SOMETHING_NEW", "unchanged"],
+  ] as const)("%s -> %s", (code, health) => {
+    expect(classifyItemHealth(code)).toBe(health);
   });
 });

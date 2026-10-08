@@ -1,6 +1,6 @@
 import type { Db } from "@psl/db";
 import type { Keyring } from "@psl/crypto";
-import type { PlaidGateway } from "@psl/plaid";
+import { classifyItemHealth, type PlaidGateway } from "@psl/plaid";
 import { decryptAccessToken, loadDataKey } from "./keys.ts";
 import { enqueue } from "./queue.ts";
 
@@ -11,9 +11,6 @@ import { enqueue } from "./queue.ts";
  * that. A delayed ERROR delivered after LOGIN_REPAIRED therefore cannot push a
  * healthy Item back into needs_reauth.
  */
-
-const LOGIN_REQUIRED = new Set(["ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION"]);
-const REVOKED = new Set(["USER_PERMISSION_REVOKED", "ACCESS_NOT_GRANTED", "ITEM_NOT_FOUND"]);
 
 export type RefreshResult = { outcome: "active" | "needs_reauth" | "revoked" | "unchanged"; resumed: boolean };
 
@@ -28,23 +25,25 @@ export async function refreshItemStatus(
   const status = await deps.plaid.getItem(await decryptAccessToken(dk, item.id, item.accessTokenCt));
   const consentExpiresAt = status.consentExpirationTime ? new Date(status.consentExpirationTime) : null;
 
-  if (status.errorCode === null) {
-    await deps.db.item.update({ where: { id: item.id }, data: { status: "active", consentExpiresAt } });
-    // Recovering from needs_reauth: resume from the stored cursor.
-    const resumed = item.status === "needs_reauth" ? await enqueue(deps.db, item.id, "transactions_sync") : false;
-    return { outcome: "active", resumed };
+  switch (classifyItemHealth(status.errorCode)) {
+    case "healthy": {
+      await deps.db.item.update({ where: { id: item.id }, data: { status: "active", consentExpiresAt } });
+      // Recovering from needs_reauth: resume from the stored cursor.
+      const resumed = item.status === "needs_reauth" ? await enqueue(deps.db, item.id, "transactions_sync") : false;
+      return { outcome: "active", resumed };
+    }
+    case "needs_reauth":
+      await deps.db.item.update({ where: { id: item.id }, data: { status: "needs_reauth", consentExpiresAt } });
+      return { outcome: "needs_reauth", resumed: false };
+    case "revoked":
+      await deps.db.item.update({ where: { id: item.id }, data: { status: "revoked" } });
+      return { outcome: "revoked", resumed: false };
+    case "unchanged":
+      // Warnings and other Item errors (institution down, pending expiration):
+      // keep syncing and let the sync's own error handling decide.
+      await deps.db.item.update({ where: { id: item.id }, data: { consentExpiresAt } });
+      return { outcome: "unchanged", resumed: false };
   }
-  if (LOGIN_REQUIRED.has(status.errorCode)) {
-    await deps.db.item.update({ where: { id: item.id }, data: { status: "needs_reauth", consentExpiresAt } });
-    return { outcome: "needs_reauth", resumed: false };
-  }
-  if (REVOKED.has(status.errorCode)) {
-    await deps.db.item.update({ where: { id: item.id }, data: { status: "revoked" } });
-    return { outcome: "revoked", resumed: false };
-  }
-  // Other Item errors (institution down, etc.) are transient from our point of
-  // view: keep syncing and let the sync's own error handling decide.
-  return { outcome: "unchanged", resumed: false };
 }
 
 /** Synchronous ITEM_LOGIN_REQUIRED from an API call is first-hand: apply directly. */
