@@ -39,22 +39,58 @@ interface Scenario {
   chaos?: Record<string, unknown>;
   /** SIGKILL the worker mid-commit this many times before letting it finish. */
   kills?: number;
+  /**
+   * Evidence that the fault really happened, read from the scenario's process
+   * output. A green row where nothing was injected proves nothing.
+   */
+  evidence?: { what: string; pattern: RegExp; min: number };
   workerEnv?: Record<string, string>;
 }
 
 const SCENARIOS: Scenario[] = [
   { name: "clean", fault: "none (baseline)", workers: 1 },
-  { name: "kill-mid-commit", fault: "SIGKILL after 60 upserts inside the commit, 3 times, restart", workers: 1, kills: 3 },
-  { name: "webhook-x10", fault: "every webhook delivered 10 times", workers: 1, chaos: { webhookCopies: 10 } },
-  { name: "two-workers", fault: "2 worker processes + every webhook 3 times", workers: 2, chaos: { webhookCopies: 3 } },
-  { name: "mutation-page-2", fault: "MUTATION_DURING_PAGINATION on page 2 of every update", workers: 1, chaos: { mutationOnPage: 2 } },
-  { name: "plaid-500", fault: "30% of Plaid calls answer 500", workers: 1, chaos: { fail500Rate: 0.3 } },
+  {
+    name: "kill-mid-commit",
+    fault: "SIGKILL after 60 upserts inside the commit, 3 times, restart",
+    workers: 1,
+    kills: 3,
+    evidence: { what: "orphaned jobs reaped", pattern: /"event":"queue\.reaped"/, min: 1 },
+  },
+  {
+    name: "webhook-x10",
+    fault: "every webhook delivered 10 times",
+    workers: 1,
+    chaos: { webhookCopies: 10 },
+    evidence: { what: "deliveries coalesced", pattern: /"outcome":"coalesced"/, min: 50 },
+  },
+  {
+    name: "two-workers",
+    fault: "2 worker processes + every webhook 3 times",
+    workers: 2,
+    chaos: { webhookCopies: 3 },
+    evidence: { what: "syncs committed by the second worker", pattern: /"event":"job\.succeeded".*"worker_id":"two-workers-w1-/, min: 1 },
+  },
+  {
+    name: "mutation-page-2",
+    fault: "MUTATION_DURING_PAGINATION on page 2 of every update",
+    workers: 1,
+    chaos: { mutationOnPage: 2 },
+    evidence: { what: "pagination restarts", pattern: /"restarts":[1-9]/, min: 1 },
+  },
+  {
+    name: "plaid-500",
+    fault: "30% of Plaid calls answer 500",
+    workers: 1,
+    chaos: { fail500Rate: 0.3 },
+    evidence: { what: "retries after 500", pattern: /"job\.retry_scheduled".*"INTERNAL_SERVER_ERROR"/, min: 1 },
+  },
   {
     name: "plaid-timeout",
     fault: "30% of Plaid calls stall past the 1s client timeout",
     workers: 1,
     chaos: { timeoutRate: 0.3, timeoutMs: 1_500 },
     workerEnv: { PLAID_TIMEOUT_MS: "1000" },
+    evidence: { what: "retries after timeout", pattern: /"job\.retry_scheduled".*"error_kind":"transient"/, min: 1 },
   },
 ];
 
@@ -225,7 +261,13 @@ async function runScenario(s: Scenario): Promise<Result> {
   if (s.kills && kills < s.kills) checks.push(`only ${kills}/${s.kills} kills happened`);
   const reference = s.name === "clean" ? oracle : baseline;
   if (m.hash !== reference) checks.push(s.name === "clean" ? "hash != oracle" : "hash != clean run");
-  const leaked = scanForCanaries(`${OUT}${s.name}.log`);
+  const output = readFileSync(`${OUT}${s.name}.log`, "utf8").split("\n");
+  if (s.evidence) {
+    const seen = output.filter((l) => s.evidence!.pattern.test(l)).length;
+    if (seen < s.evidence.min) checks.push(`fault not observed: ${s.evidence.what} = ${seen}`);
+  }
+  // ADR 0013: no access token, public token or PII canary may appear in any process output.
+  const leaked = output.filter((l) => l.includes("CANARY")).length;
   if (leaked > 0) checks.push(`${leaked} log lines contain CANARY values`);
 
   return {
@@ -363,13 +405,6 @@ async function control(path: string, body: Record<string, unknown> = {}): Promis
   if (!res.ok) throw new Error(`control ${path} failed`);
   // Keep amounts as exact text (same parser as the gateway).
   return parsePlaidJson(await res.text());
-}
-
-/** ADR 0013: no access token, public token or PII canary may appear in any process output. */
-function scanForCanaries(path: string): number {
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .filter((l) => l.includes("CANARY")).length;
 }
 
 function renderTable(rs: Result[], oracleHashValue: string | null): string {
