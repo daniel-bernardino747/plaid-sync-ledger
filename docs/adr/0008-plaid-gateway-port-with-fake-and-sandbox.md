@@ -42,10 +42,22 @@ in a single place.
 **One HTTP adapter, two backends.** The adapter is a small hand-written
 `fetch` client (it runs in Node and in the Workers runtime), with response
 validation and an explicit per-request timeout via `AbortSignal.timeout`.
-Switching backends is configuration only:
+Switching backends is configuration only, through one variable read by one
+function, `plaidConfigFromEnv()` in `packages/plaid/src/config.ts`:
 
-- `PLAID_BASE_URL=https://sandbox.plaid.com` for the real Sandbox;
-- `PLAID_BASE_URL=http://localhost:<port>` for `packages/plaid-fake`.
+- `PLAID_TARGET=fake` (default): the local fake (`FAKE_PLAID_URL`, which must
+  be a local address) with the fake's fixed credentials. `PLAID_CLIENT_ID` and
+  `PLAID_SECRET` are never read, so real credentials cannot reach a non-Plaid
+  host;
+- `PLAID_TARGET=sandbox`: `https://sandbox.plaid.com` with `PLAID_CLIENT_ID` /
+  `PLAID_SECRET`, which are then required.
+
+There is no production target, so Sandbox-only endpoints are safe by
+construction.
+
+> Amended after code review. The first version switched backends with
+> `PLAID_BASE_URL` plus credentials falling back to fake values, which sent
+> real credentials to the fake once both were configured (AI errata #13).
 
 The official `plaid` SDK is not used. It would hide the error classification
 and timeout behavior this project exists to demonstrate.
