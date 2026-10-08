@@ -419,7 +419,8 @@ function renderTable(rs: Result[], oracleHashValue: string | null): string {
     ? `\nOracle (the fake's ground truth hashed by the same \`ledger_hash()\` SQL): \`${oracleHashValue.slice(0, 12)}\`. ` +
       "`clean` must equal the oracle; every other scenario must equal `clean`. Each row also asserts: no dead jobs, " +
       "no running job with an expired lease, every Item's cursor equals the fake's final cursor, at least one webhook " +
-      "went through the real Worker, and no CANARY value appears in any process output."
+      "went through the real Worker, the injected fault was observed in the process output, and no CANARY value " +
+      "appears in any process output."
     : "";
   return `${head}\n${rows.join("\n")}\n${footer}`;
 }
